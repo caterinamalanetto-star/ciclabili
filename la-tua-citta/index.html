@@ -73,7 +73,7 @@
     }).filter(function (d) { return d.d24 != null; });
     var last = res[1][res[1].length - 1], areaAvg = { Nord: R.num(last["Nord"]), Centro: R.num(last["Centro"]), Mezzogiorno: R.num(last["Mezzogiorno"]) };
     var ranked = data.slice().sort(function (a, b) { return b.d24 - a.d24; });
-    ranked.forEach(function (d, i) { d.rank = i + 1; });
+    ranked.forEach(function (d) { d.rank = 1 + data.filter(function (o) { return o.d24 > d.d24; }).length; d.tie = data.filter(function (o) { return o.d24 === d.d24; }).length; });
     var byKey = {}; data.forEach(function (d) { byKey[norm(d.k)] = d; });
     Object.keys(ALIAS).forEach(function (a) { byKey[a] = byKey[norm(ALIAS[a])]; });
 
@@ -106,10 +106,22 @@
         : ratio <= 0.87 ? "<b>il " + f0((1 - ratio) * 100) + "% in meno della</b>" + rest
         : "<b>in linea con la</b>" + rest;
       var area = d.area === "Mezzogiorno" ? "Mezzogiorno" : d.area;
+      if (d.k24 === 0) {
+        d3.select("#card").html(
+          '<h2 class="tc-name">' + esc(d.k) + '</h2><div class="tc-area">' + area + "</div>" +
+          '<div class="tc-lead"><div class="tc-big">0</div><p>km di piste ciclabili nel 2024: secondo Istat, <b>' + esc(d.k) + " non ne ha</b>. " +
+          (d.k19 > 0 ? "Nel 2019 ne contava " + f1(d.k19) + " km. " : "") +
+          "È tra i <b>" + d.tie + " capoluoghi senza piste</b>, su " + data.length + ".</p></div>" +
+          '<div class="tc-grid">' +
+            "<div><b>" + (d.bs === 0 ? "nessuno" : f1(d.bs)) + "</b><span>" + (d.bs === 0 ? "servizio di bike sharing nel 2024" : "bici in sharing ogni 10mila abitanti") + "</span></div>" +
+            "<div><b>" + (d.z30 === "sì" ? "sì" : d.z30 === "no" ? "no" : "n.d.") + "</b><span>Zone 30 istituite nel 2024</span></div>" +
+          "</div>");
+        return;
+      }
       d3.select("#card").html(
         '<h2 class="tc-name">' + esc(d.k) + '</h2><div class="tc-area">' + area + "</div>" +
         '<div class="tc-lead"><div class="tc-big">' + f1(d.d24) + '</div><p>km di piste ogni 100 km² di territorio nel 2024: ' + cmp + " (" + f1(avg) + "). " +
-        "È <b>" + d.rank + "ª su " + data.length + "</b> tra i capoluoghi.</p></div>" +
+        "È <b>" + d.rank + "ª su " + data.length + "</b> tra i capoluoghi" + (d.tie > 1 ? ", a pari merito con altre " + (d.tie - 1) : "") + ".</p></div>" +
         '<div class="tc-grid">' +
           "<div><b>" + (d.k24 >= 100 ? f0(d.k24) : f1(d.k24)) + " km</b><span>di piste in tutto nel 2024</span></div>" +
           "<div><b>" + (ch == null ? "n.d." : Math.abs(ch) < 0.5 ? "invariata" : (ch >= 0 ? "+" : "−") + f0(Math.abs(ch)) + "%") + "</b><span>" + (ch == null ? "variazione dal 2019 non disponibile" : "rispetto al 2019 (" + (d.k19 >= 100 ? f0(d.k19) : f1(d.k19)) + " km)") + "</span></div>" +

@@ -64,7 +64,7 @@ Ancona;Centro;3,6;3,6;4,5;4,5;0;no
 Macerata;Centro;5,7;5,7;5,3;5,3;0;no
 Fermo;Centro;5,6;16,0;7,0;20,0;0;sì
 Ascoli Piceno;Centro;4,4;5,1;7,0;8,0;0;no
-Viterbo;Centro;0,2;;0,8;;0;no
+Viterbo;Centro;0,2;0;0,8;0;0;no
 Rieti;Centro;12,6;12,6;26,0;26,0;15,5;sì
 Roma;Centro;19,3;25,5;248,1;328,1;21,8;sì
 Latina;Centro;4,0;6,5;11,0;18,2;0;sì
@@ -72,10 +72,10 @@ Frosinone;Centro;25,6;14,9;12,0;7,0;0;no
 L'Aquila;Mezzogiorno;1,4;5,5;6,8;26,0;1,4;sì
 Teramo;Mezzogiorno;7,9;7,9;12,0;12,0;5,8;sì
 Pescara;Mezzogiorno;96,0;110,4;33,0;38,0;33,8;sì
-Chieti;Mezzogiorno;;;;;0;no
+Chieti;Mezzogiorno;0;0;0;0;0;no
 Isernia;Mezzogiorno;2,9;2,9;2,0;2,0;0;no
 Campobasso;Mezzogiorno;;8,9;;5,0;4,2;no
-Caserta;Mezzogiorno;20,0;;10,8;;0;sì
+Caserta;Mezzogiorno;20,0;0;10,8;0;0;sì
 Benevento;Mezzogiorno;14,5;16,9;19,0;22,1;0;sì
 Napoli;Mezzogiorno;16,1;20,1;19,2;24,0;5,5;no
 Avellino;Mezzogiorno;2,6;29,4;0,8;9,0;1,0;sì
@@ -93,9 +93,9 @@ Matera;Mezzogiorno;0,8;0,3;3,0;1,0;0;no
 Cosenza;Mezzogiorno;39,6;63,4;15,0;24,0;0;sì
 Crotone;Mezzogiorno;6,6;2,7;12,0;5,0;0;no
 Catanzaro;Mezzogiorno;13,7;13,7;15,4;15,4;0;sì
-Vibo Valentia;Mezzogiorno;;;;;2,6;no
+Vibo Valentia;Mezzogiorno;0;0;0;0;2,6;no
 Reggio di Calabria;Mezzogiorno;3,3;5,7;8,0;13,7;1,2;no
-Trapani;Mezzogiorno;;;;;0;no
+Trapani;Mezzogiorno;0;0;0;0;0;no
 Palermo;Mezzogiorno;29,4;40,3;47,2;64,8;18,3;sì
 Messina;Mezzogiorno;3,4;5,3;7,2;11,2;4,6;sì
 Agrigento;Mezzogiorno;2,0;1,2;5,0;3,0;0;no
