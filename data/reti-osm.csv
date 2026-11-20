@@ -1,4 +1,4 @@
-Città;Km separati dalle auto;Km corsie dipinte;Pezzi separati;Km rete continua più grande;Pezzi sotto 500 m
-Torino;220,9;19,4;79;119,8;53
-Milano;243,0;45,9;273;16,0;163
-Bologna;181,0;77,1;149;75,7;113
+Città;Km separati dalle auto;Km corsie dipinte;Pezzi separati;Km rete continua più grande;Pezzi sotto 500 m;Km viaggio più lungo su pista protetta
+Torino;220,9;19,4;79;119,8;53;24,5
+Milano;243,0;45,9;273;16,0;163;5,8
+Bologna;181,0;77,1;149;75,7;113;15,1
