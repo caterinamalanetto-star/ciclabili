@@ -35,6 +35,8 @@
   .rc-key .dot { width: 9px; height: 9px; border-radius: 50%; vertical-align: 0; }
   .rc-key .dash { height: 0; border-top: 1.5px dashed var(--ink); background: none; }
   .rc-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 18px; }
+  .rc-stats .rc-stat:nth-child(n+4) { padding-top: 14px; border-top: 1px solid var(--rule); }
+  .rc-stats .rc-stat:nth-child(4) { grid-column: 1 / 2; }
   @media (max-width: 519px) { .rc-stats { grid-template-columns: 1fr; gap: 10px; } }
   .rc-stat b { display: block; font-size: 26px; font-weight: 700; letter-spacing: -0.02em; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.1; }
   .rc-stat span { font-size: 13px; line-height: 1.4; color: var(--ink-2); }
@@ -76,10 +78,10 @@
 
   <div class="rc-stats" id="stats"></div>
 
-  <p class="rc-note">La bicicletta percorre avanti e indietro il viaggio più lungo che si può fare restando sempre su piste separate dalle auto. Due tratti sono considerati collegati se distano al massimo 15 metri, circa la larghezza di un attraversamento. Le mappe non sono alla stessa scala. OpenStreetMap è mappato da volontari: i km mappati vanno dall'87% al 105% di quelli rilevati da Istat.</p>
+  <p class="rc-note">La bicicletta percorre avanti e indietro il viaggio più lungo che si può fare restando sempre su piste separate dalle auto. Due tratti sono considerati collegati se distano al massimo 15 metri, circa la larghezza di un attraversamento. Le mappe non sono alla stessa scala. OpenStreetMap è mappato da volontari: i km mappati vanno dall'87% al 105% di quelli rilevati da Istat. Istat non pubblica il numero di ciclisti morti per singolo comune: per questo riportiamo i morti in strada di tutte le categorie e le bici coinvolte in incidenti, che Istat conta insieme ai monopattini elettrici.</p>
 
   <footer class="r-foot">
-    <span>Fonte: elaborazione su dati © OpenStreetMap contributors (ODbL), dati al 19-20 novembre 2026</span>
+    <span>Fonte: elaborazione su dati © OpenStreetMap contributors (ODbL), dati al 19-20 novembre 2026; Istat-ACI, Incidenti stradali 2025 (tav. 3.4 e 4.6)</span>
     <span>Elaborazione Radar – QN</span>
   </footer>
 </main>
@@ -97,12 +99,13 @@
   var esc = function (t) { return String(t).replace(/[&<>"]/g, function (ch) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]; }); };
   R.dismissOutside(stageEl, function () { tip.hide(); clearHover(); });
 
-  Promise.all([R.loadCSV("../data/reti-osm.csv"), R.loadCSV("../data/luoghi-morti.csv").catch(function () { return []; })]).then(function (res) {
+  Promise.all([R.loadCSV("../data/reti-osm.csv"), R.loadCSV("../data/luoghi-morti.csv").catch(function () { return []; }), R.loadCSV("../data/tre-citta.csv")]).then(function (res) {
     var luoghi = res[1].filter(function (r) { return r["Latitudine"]; });
+    var inc = {}; res[2].forEach(function (r) { inc[r["Città"]] = { morti: R.num(r["Morti in strada 2025"]), morti19: R.num(r["Morti in strada 2019"]), bici: R.num(r["Bici e monopattini coinvolti in incidenti 2025"]) }; });
     cities = res[0].map(function (r) {
       return { k: r["Città"], P: R.num(r["Km separati dalle auto"]), C: R.num(r["Km corsie dipinte"]), pezzi: R.num(r["Pezzi separati"]),
         big: R.num(r["Km rete continua più grande"]), corti: R.num(r["Pezzi sotto 500 m"]), viaggio: R.num(r["Km viaggio più lungo su pista protetta"]),
-        luoghi: luoghi.filter(function (l) { return l["Città"] === r["Città"]; }) };
+        luoghi: luoghi.filter(function (l) { return l["Città"] === r["Città"]; }), inc: inc[r["Città"]] };
     });
     if (luoghi.length) d3.select("#key").append("span").html('<i class="dot" style="background:var(--ink)"></i>Luoghi in cui è morto un ciclista');
     return Promise.all(cities.map(function (c) { return d3.json("../data/rete-" + c.k.toLowerCase() + ".geojson"); }));
@@ -256,6 +259,10 @@
       { v: f0(c.pezzi), t: "pezzi di rete protetta staccati tra loro, " + f0(c.corti) + " più corti di 500 metri" },
       { v: fmt(c.C / (c.P + c.C) * 100, 0) + "%", t: "della rete è solo una corsia dipinta sulla carreggiata (" + f0(c.C) + " km)", red: true }
     ];
+    if (c.inc) {
+      data.push({ v: f0(c.inc.morti), t: "morti in incidenti stradali nel comune nel 2025, tra tutti gli utenti della strada (" + f0(c.inc.morti19) + " nel 2019)" });
+      data.push({ v: f0(c.inc.bici), t: "bici e monopattini coinvolti in incidenti con feriti o morti nel 2025" });
+    }
     d3.select("#stats").selectAll("div").data(data).join("div").attr("class", function (d) { return "rc-stat" + (d.red ? " is-red" : ""); })
       .html(function (d) { return "<b>" + d.v + "</b><span>" + d.t + "</span>"; });
   }
