@@ -27,7 +27,11 @@
     msgTheme = d.theme === "dark" || d.theme === "light" ? d.theme : null;
     applyTheme();
     applyBg(d.bg);
+    // primo contatto con la pagina ospite: rimanda l'altezza, nel caso lo script
+    // del CMS sia partito dopo il caricamento dell'iframe e abbia perso il primo messaggio
+    if (!gotHost) { gotHost = true; setTimeout(postHeight, 0); }
   });
+  var gotHost = false;
 
   // ---------- Formati numerici italiani ----------
   var locale = d3.formatLocale({
@@ -116,7 +120,7 @@
   }
   var heightTimer;
   function scheduleHeight() { clearTimeout(heightTimer); heightTimer = setTimeout(postHeight, 60); }
-  window.addEventListener("load", postHeight);
+  window.addEventListener("load", function () { postHeight(); setTimeout(postHeight, 1500); setTimeout(postHeight, 4000); });
   window.addEventListener("resize", scheduleHeight);
   if (window.ResizeObserver) {
     document.addEventListener("DOMContentLoaded", function () {

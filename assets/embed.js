@@ -1,9 +1,12 @@
 /* Radar – QN · script per la pagina ospite (CMS): altezza degli iframe e tema.
-   Questo file è la versione leggibile dello snippet inline usato nel CMS.
-   Prima di usarlo sostituisci ACCOUNT con l'account GitHub su cui sono pubblicate le dataviz. */
+   Versione leggibile dello snippet inline (assets/embed.min.js).
+   Prima di usarlo sostituisci ACCOUNT con l'account GitHub su cui sono pubblicate le dataviz.
+   v3: nessun carattere minore, maggiore o "e commerciale" (alcuni CMS li riscrivono e rompono lo script);
+   chiede l'altezza agli iframe all'avvio e al caricamento di ciascuno, così funziona anche
+   se il CMS esegue lo script dopo che gli iframe hanno già mandato il primo messaggio. */
 (function () {
-  if (window.__radarQNv2) return;
-  window.__radarQNv2 = 1;
+  if (window.__radarQNv3) return;
+  window.__radarQNv3 = 1;
   var O = "https://ACCOUNT.github.io";
   var MQ = window.matchMedia("(prefers-color-scheme: dark)");
 
@@ -12,16 +15,16 @@
       return (f.getAttribute("src") || "").indexOf(O + "/") === 0;
     });
   }
-  // tema del sito QN: data-theme sul tag <html>; se manca, quello del sistema
   function theme() {
     var t = document.documentElement.getAttribute("data-theme");
     return t === "dark" || t === "light" ? t : (MQ.matches ? "dark" : "light");
   }
-  // primo sfondo non trasparente risalendo dall'iframe
   function bgOf(el) {
-    for (; el && el.nodeType === 1; el = el.parentElement) {
+    while (el) {
+      if (el.nodeType !== 1) return null;
       var c = getComputedStyle(el).backgroundColor;
-      if (c && c !== "transparent" && !/rgba\([^)]*,\s*0\)$/.test(c)) return c;
+      if (c) if (c !== "transparent") if (!/rgba\([^)]*,\s*0\)$/.test(c)) return c;
+      el = el.parentElement;
     }
     return null;
   }
@@ -29,20 +32,32 @@
     try { f.contentWindow.postMessage({ sentinel: "radar-qn", type: "theme", theme: theme(), bg: bgOf(f.parentElement) }, O); } catch (e) {}
   }
   function sendAll() { frames().forEach(send); }
+  function hook() {
+    frames().forEach(function (f) {
+      if (f.__radarQN) return;
+      f.__radarQN = 1;
+      f.addEventListener("load", function () { send(f); });
+    });
+  }
 
   window.addEventListener("message", function (e) {
     if (e.origin !== O) return;
     var d = e.data;
-    if (!d || d.sentinel !== "radar-qn" || d.type !== "height") return;
+    if (!d) return;
+    if (d.sentinel !== "radar-qn") return;
+    if (d.type !== "height") return;
     frames().forEach(function (f) {
       if (f.contentWindow !== e.source) return;
       var h = Math.ceil(+d.height);
-      if (h > 0 && 20000 > h) f.style.height = h + "px";   // limite di sicurezza
-      send(f);                                             // il primo messaggio fa anche da handshake
+      if (h === Math.min(Math.max(h, 1), 20000)) f.style.height = h + "px";
+      send(f);
     });
   });
-  // cambio di tema sul sito (data-theme) o nel sistema
   new MutationObserver(function () { sendAll(); setTimeout(sendAll, 400); })
     .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   if (MQ.addEventListener) MQ.addEventListener("change", sendAll);
+
+  hook(); sendAll();
+  [500, 1500, 4000].forEach(function (t) { setTimeout(function () { hook(); sendAll(); }, t); });
+  window.addEventListener("load", function () { hook(); sendAll(); });
 })();
