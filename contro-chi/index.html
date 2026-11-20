@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contro chi muoiono i ciclisti – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+<style>
+  .wf-key { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 18px 0 0; font-size: 13px; color: var(--ink-2); }
+  .wf-key b { color: var(--ink); font-weight: 600; }
+  .wf-key i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+</style>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">Più di metà dei ciclisti muore contro un'auto</h1>
+    <p class="r-sub">Morti in bicicletta (anche elettrica) nel 2025 secondo il veicolo con cui si sono scontrati. Ogni quadrato è una persona</p>
+  </header>
+
+  <div class="r-big" id="big" aria-hidden="true">
+    <span class="r-big__num" id="big-num">&nbsp;</span>
+    <span class="r-big__label" id="big-label"></span>
+  </div>
+
+  <figure class="r-chart" id="waffle">
+    <div class="wf-key" id="key"></div>
+  </figure>
+
+  <footer class="r-foot">
+    <span>Fonte: Istat-ACI, Incidenti stradali 2025, matrice di collisione (tavola A1)</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt, f0 = function (v) { return fmt(v, 0); };
+  var COL = { "Autovetture": "var(--red)", "Camion e furgoni": "var(--grey-2)", "Nessun altro veicolo": "var(--grey-4)", "Altri veicoli": "var(--grey-5)" };
+  var NOTE = { "Nessun altro veicolo": "Cadute e uscite di strada senza scontro con altri veicoli", "Altri veicoli": "Moto, ciclomotori, altre bici, autobus e altri mezzi" };
+
+  R.loadCSV("../data/contro-chi.csv").then(function (raw) {
+    var groups = raw.map(function (r) {
+      var c = R.num(r["Ciclisti"]), e = R.num(r["Bici elettriche"]);
+      return { k: r["Controparte"], c: c, e: e, v: c + e };
+    });
+    var tot = d3.sum(groups, function (d) { return d.v; });
+    var auto = groups[0];
+    var units = [];
+    groups.forEach(function (gp) { for (var i = 0; i < gp.v; i++) units.push(gp); });
+
+    var bigNum = d3.select("#big-num"), share = auto.v / tot;
+    d3.select("#big-label").text("dei " + f0(tot) + " morti in bicicletta nel 2025 si è scontrato con un'auto: " + f0(auto.v) + " persone");
+    var fp = function (v) { return fmt(v, 0) + "%"; };
+    if (R.reduced) bigNum.text(fp(share * 100));
+    else { bigNum.text(fp(0)); R.onFirstView(document.getElementById("big"), function () { R.countUp(bigNum, share * 100, fp, "play"); }); }
+
+    d3.select("#key").html(groups.map(function (d) {
+      return '<span><i style="background:' + COL[d.k] + '"></i><b>' + f0(d.v) + "</b> " + d.k.toLowerCase() + "</span>";
+    }).join(""));
+
+    var host = document.getElementById("waffle");
+    var tip = R.tooltip(host);
+    var clear = function () {};
+    R.dismissOutside(host, function () { tip.hide(); clear(); });
+
+    R.responsive(host, function (W, phase) {
+      var narrow = R.isNarrow(W);
+      var cols = narrow ? 19 : 38;
+      var gap = 2, s = Math.floor((W - gap * (cols - 1)) / cols);
+      s = Math.min(s, 17);
+      var rowsN = Math.ceil(units.length / cols);
+      var H = rowsN * (s + gap);
+
+      d3.select(host).select("svg").remove();
+      var svg = d3.select(host).insert("svg", ".wf-key").attr("width", W).attr("height", H).attr("role", "img")
+        .attr("aria-label", "Grafico a quadrati: dei " + f0(tot) + " morti in bicicletta nel 2025, " + groups.map(function (d) { return f0(d.v) + " " + d.k.toLowerCase(); }).join(", ") + ".");
+      svg.append("title").text("Morti in bicicletta nel 2025 per controparte");
+
+      var cells = svg.append("g").selectAll("rect").data(units).join("rect").attr("class", "mark")
+        .attr("width", s).attr("height", s).attr("rx", 2)
+        .attr("x", function (d, i) { return (i % cols) * (s + gap); })
+        .attr("y", function (d, i) { return Math.floor(i / cols) * (s + gap); })
+        .style("fill", function (d) { return COL[d.k]; });
+      R.enter(cells, phase,
+        function (sel) { sel.style("opacity", 0); },
+        function (sel) { (sel.delay ? sel.delay(function (d, i) { return i * 2; }) : sel).style("opacity", 1); });
+
+      clear = function () { cells.classed("is-dimmed", false); };
+      cells.on("pointerenter pointerdown", function (ev, d) {
+        cells.classed("is-dimmed", function (q) { return q !== d; });
+        var i = units.indexOf(this.__data__);
+        tip.show(R.tipHTML({ title: d.k, value: f0(d.v), unit: "morti (" + fmt(d.v / tot * 100, 0) + "%)",
+          rows: [["Su bici tradizionale", f0(d.c)], ["Su bici elettrica", f0(d.e)]], note: NOTE[d.k] || null }),
+          +this.getAttribute("x") + s / 2, +this.getAttribute("y"));
+      }).on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); clear(); } });
+    });
+  }).catch(function (e) { R.fail("#waffle", e); });
+})();
+</script>
+</body>
+</html>

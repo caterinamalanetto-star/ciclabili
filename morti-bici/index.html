@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Morti in bicicletta in Italia – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">In bici si torna a morire di più</h1>
+    <p class="r-sub">Morti in incidenti stradali su bici tradizionali ed elettriche, per anno</p>
+  </header>
+
+  <div class="r-big" id="big" aria-hidden="true">
+    <span class="r-big__num" id="big-num">&nbsp;</span>
+    <span class="r-big__label" id="big-label"></span>
+  </div>
+
+  <figure class="r-chart" id="morti"></figure>
+
+  <footer class="r-foot">
+    <span>Fonte: Istat-ACI, Incidenti stradali 2025, tavola 4.9</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt, f0 = function (v) { return fmt(v, 0); };
+
+  R.loadCSV("../data/morti-bici.csv").then(function (raw) {
+    var data = raw.map(function (r) { return { k: r["Anno"], v: R.num(r["Morti in bicicletta"]) }; });
+    var last = data[data.length - 1], prev = data[data.length - 2];
+    var growth = last.v / prev.v - 1;
+    // ultimo anno con un valore più alto di quello finale
+    var higher = data.slice(0, -1).filter(function (d) { return d.v > last.v; });
+    var since = higher[higher.length - 1];
+
+    var bigNum = d3.select("#big-num");
+    d3.select("#big-label").text("morti in bicicletta nel " + last.k + ": " + (growth >= 0 ? "+" : "") + fmt(growth * 100, 0) +
+      "% sul " + prev.k + ", il dato più alto dal " + since.k);
+    if (R.reduced) bigNum.text(f0(last.v));
+    else { bigNum.text(f0(0)); R.onFirstView(document.getElementById("big"), function () { R.countUp(bigNum, last.v, f0, "play"); }); }
+
+    var host = document.getElementById("morti");
+    var tip = R.tooltip(host);
+    var clear = function () {};
+    R.dismissOutside(host, function () { tip.hide(); clear(); });
+
+    R.responsive(host, function (W, phase) {
+      var narrow = R.isNarrow(W);
+      var m = { top: 24, right: 0, bottom: 28, left: 0 };
+      var H = narrow ? 280 : 330;
+      var w = W - m.left - m.right, h = H - m.top - m.bottom;
+      var x = d3.scaleBand().domain(data.map(function (d) { return d.k; })).range([0, w]).paddingInner(narrow ? 0.18 : 0.28).paddingOuter(0.02);
+      var y = d3.scaleLinear().domain([0, d3.max(data, function (d) { return d.v; })]).range([h, 0]);
+      var keyYears = [data[0].k, since.k, "2020", prev.k, last.k];
+      var isKey = function (d) { return keyYears.indexOf(d.k) >= 0; };
+
+      d3.select(host).select("svg").remove();
+      var svg = d3.select(host).insert("svg", ".r-tip").attr("width", W).attr("height", H).attr("role", "img")
+        .attr("aria-label", "Grafico a barre: i morti in bicicletta passano da " + f0(data[0].v) + " nel " + data[0].k + " a " +
+          f0(prev.v) + " nel " + prev.k + ", poi risalgono a " + f0(last.v) + " nel " + last.k + ".");
+      svg.append("title").text("Morti in bicicletta in Italia per anno");
+      var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+
+      g.append("line").attr("class", "baseline").attr("x1", 0).attr("x2", w).attr("y1", h + 0.5).attr("y2", h + 0.5);
+
+      var bars = g.append("g").selectAll("path").data(data).join("path").attr("class", "mark")
+        .style("fill", function (d) { return d === last ? "var(--red)" : "var(--grey-4)"; });
+      R.enter(bars, phase,
+        function (s) { s.attr("d", function (d) { return R.barPathV(x(d.k), h, x.bandwidth(), 0, 2); }); },
+        function (s) { var f = function (d, t) { var yv = y(d.v * t); return R.barPathV(x(d.k), yv, x.bandwidth(), h - yv, 2); };
+          if (s.attrTween) s.attrTween("d", function (d) { return function (t) { return f(d, t); }; }); else s.attr("d", function (d) { return f(d, 1); }); });
+
+      var vals = g.append("g").selectAll("text").data(data.filter(isKey)).join("text").attr("class", "val-label mark")
+        .attr("text-anchor", "middle").attr("x", function (d) { return x(d.k) + x.bandwidth() / 2; })
+        .attr("y", function (d) { return y(d.v) - 6; })
+        .style("fill", function (d) { return d === last ? "var(--red)" : null; });
+      vals.each(function (d) { R.countUp(d3.select(this), d.v, f0, phase); });
+
+      g.append("g").selectAll("text").data(narrow ? data.filter(isKey) : data).join("text").attr("class", "tick-label").attr("text-anchor", "middle")
+        .attr("x", function (d) { return x(d.k) + x.bandwidth() / 2; }).attr("y", h + 18)
+        .text(function (d) { return narrow ? "’" + d.k.slice(2) : d.k; });
+
+      clear = function () { bars.classed("is-dimmed", false); vals.classed("is-dimmed", false); };
+      g.append("g").selectAll("rect").data(data).join("rect").attr("class", "hit")
+        .attr("x", function (d) { return x(d.k) - x.step() * x.paddingInner() / 2; }).attr("width", x.step())
+        .attr("y", -m.top).attr("height", h + m.top + m.bottom)
+        .on("pointerenter pointerdown", function (ev, d) {
+          bars.classed("is-dimmed", function (q) { return q !== d; });
+          vals.classed("is-dimmed", function (q) { return q !== d; });
+          var i = data.indexOf(d), p = data[i - 1];
+          var rows = p ? [["Rispetto al " + p.k, (d.v - p.v >= 0 ? "+" : "") + f0(d.v - p.v)]] : [];
+          tip.show(R.tipHTML({ title: d.k, value: f0(d.v), unit: "morti", rows: rows,
+            note: d.k === "2020" ? "Anno della pandemia: mobilità ridotta" : null }),
+            x(d.k) + x.bandwidth() / 2 + m.left, y(d.v) + m.top);
+        })
+        .on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); clear(); } });
+    });
+  }).catch(function (e) { R.fail("#morti", e); });
+})();
+</script>
+</body>
+</html>

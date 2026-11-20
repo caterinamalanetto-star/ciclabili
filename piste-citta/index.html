@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Piste ciclabili nelle grandi città – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">Torino è la grande città con più piste ciclabili</h1>
+    <p class="r-sub">Km di piste ciclabili ogni 100 km² di superficie comunale nei capoluoghi delle città metropolitane, 2024</p>
+  </header>
+
+  <figure class="r-chart" id="piste"></figure>
+
+  <footer class="r-foot">
+    <span>Fonte: Istat, Ambiente urbano 2024, tavole 20.1 e 20.2</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt;
+  var EVID = "Torino";
+  var NOMI = { "Reggio di Calabria": "Reggio Calabria" };
+
+  R.loadCSV("../data/piste-metropolitane.csv").then(function (raw) {
+    var data = raw.map(function (r) {
+      return {
+        k: r["Comune"], nome: NOMI[r["Comune"]] || r["Comune"],
+        dens: R.num(r["Densità 2024 (km/100 km²)"]),
+        km19: R.num(r["Km 2019"]), km24: R.num(r["Km 2024"])
+      };
+    }).sort(function (a, b) { return b.dens - a.dens; });
+    var top = data[0], last = data[data.length - 1];
+
+    var host = document.getElementById("piste");
+    var tip = R.tooltip(host);
+    var clear = function () {};
+    R.dismissOutside(host, function () { tip.hide(); clear(); });
+
+    R.responsive(host, function (W, phase) {
+      var narrow = R.isNarrow(W);
+      var labW = narrow ? 104 : 124;
+      var m = { top: 4, right: 8, bottom: 4, left: labW };
+      var row = narrow ? 28 : 30, bh = narrow ? 16 : 18;
+      var H = m.top + m.bottom + row * data.length;
+      var w = W - m.left - m.right;
+      var x = d3.scaleLinear().domain([0, top.dens]).range([0, w - 48]);
+      var yy = function (i) { return i * row + (row - bh) / 2; };
+      var f1 = function (v) { return fmt(v, 1); };
+
+      d3.select(host).select("svg").remove();
+      var svg = d3.select(host).insert("svg", ".r-tip").attr("width", W).attr("height", H).attr("role", "img")
+        .attr("aria-label", "Grafico a barre: tra i capoluoghi metropolitani " + top.nome + " ha la rete ciclabile più densa, con " +
+          f1(top.dens) + " km ogni 100 km², mentre " + last.nome + " ne ha " + f1(last.dens) + ".");
+      svg.append("title").text("Densità delle piste ciclabili nei capoluoghi metropolitani, 2024");
+      var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+
+      g.append("g").selectAll("text").data(data).join("text").attr("class", "tick-label")
+        .attr("x", -labW).attr("y", function (d, i) { return yy(i) + bh / 2; }).attr("dy", "0.35em")
+        .style("fill", function (d) { return d.k === EVID ? "var(--ink)" : null; })
+        .style("font-weight", function (d) { return d.k === EVID ? 600 : null; })
+        .text(function (d) { return d.nome; });
+      g.append("line").attr("class", "baseline").attr("x1", 0.5).attr("x2", 0.5).attr("y1", 0).attr("y2", row * data.length);
+
+      var bars = g.append("g").selectAll("path").data(data).join("path").attr("class", "mark")
+        .style("fill", function (d) { return d.k === EVID ? "var(--red)" : "var(--blue)"; });
+      R.enter(bars, phase,
+        function (s) { s.attr("d", function (d, i) { return R.barPathH(1, yy(i), 0, bh, 2); }); },
+        function (s) { var f = function (d, t) { var i = data.indexOf(d); return R.barPathH(1, yy(i), Math.max(1, x(d.dens) * t), bh, 2); };
+          if (s.attrTween) s.attrTween("d", function (d) { return function (t) { return f(d, t); }; }); else s.attr("d", function (d) { return f(d, 1); }); });
+
+      var vals = g.append("g").selectAll("text").data(data).join("text").attr("class", "val-label mark")
+        .attr("x", function (d) { return Math.max(1, x(d.dens)) + 7; }).attr("y", function (d, i) { return yy(i) + bh / 2; }).attr("dy", "0.35em");
+      vals.each(function (d) { R.countUp(d3.select(this), d.dens, f1, phase); });
+
+      clear = function () { bars.classed("is-dimmed", false); vals.classed("is-dimmed", false); };
+      g.append("g").selectAll("rect").data(data).join("rect").attr("class", "hit")
+        .attr("x", -labW).attr("width", W).attr("y", function (d, i) { return i * row; }).attr("height", row)
+        .on("pointerenter pointerdown", function (ev, d) {
+          bars.classed("is-dimmed", function (q) { return q !== d; });
+          vals.classed("is-dimmed", function (q) { return q !== d; });
+          var i = data.indexOf(d), v = d.km24 / d.km19 - 1;
+          tip.show(R.tipHTML({
+            title: d.nome, value: f1(d.dens), unit: "km ogni 100 km²",
+            rows: [["Rete nel 2024", fmt(d.km24, 1) + " km"], ["Rete nel 2019", fmt(d.km19, 1) + " km"],
+                   ["Variazione", (v >= 0 ? "+" : "") + fmt(v * 100, 0) + "%"]]
+          }), Math.min(x(d.dens) + m.left, W - 20), yy(i) + m.top);
+        })
+        .on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); clear(); } });
+    });
+  }).catch(function (e) { R.fail("#piste", e); });
+})();
+</script>
+</body>
+</html>

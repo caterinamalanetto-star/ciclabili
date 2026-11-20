@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bologna, morti in strada prima e dopo la Città 30 – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">Bologna, i morti in strada dopo la Città 30</h1>
+    <p class="r-sub">Morti in incidenti stradali nel comune di Bologna, per anno. Dal 16 gennaio 2024 il limite è di 30 km/h su gran parte delle strade</p>
+  </header>
+
+  <div class="r-big" id="big" aria-hidden="true">
+    <span class="r-big__num" id="big-num">&nbsp;</span>
+    <span class="r-big__label" id="big-label"></span>
+  </div>
+
+  <figure class="r-chart" id="bo"></figure>
+
+  <footer class="r-foot">
+    <span>Fonte: Istat-ACI, Incidenti stradali 2025, tavola 4.6</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt, f0 = function (v) { return fmt(v, 0); };
+  var START = "2024";
+
+  R.loadCSV("../data/bologna-morti.csv").then(function (raw) {
+    var data = raw.map(function (r) { return { k: r["Anno"], v: R.num(r["Morti"]) }; });
+    var i0 = data.findIndex(function (d) { return d.k === START; });
+    var dopo = data.slice(i0), prima = data.slice(i0 - dopo.length, i0);
+    var sDopo = d3.sum(dopo, function (d) { return d.v; }), sPrima = d3.sum(prima, function (d) { return d.v; });
+    var avgPre = d3.mean(data.slice(0, i0), function (d) { return d.v; });
+
+    var bigNum = d3.select("#big-num"), ch = (sDopo / sPrima - 1) * 100;
+    d3.select("#big-label").text("morti nel biennio " + dopo[0].k + "-" + dopo[dopo.length - 1].k + ", contro i " + f0(sPrima) +
+      " del biennio " + prima[0].k + "-" + prima[prima.length - 1].k + " (" + (ch < 0 ? "−" : "+") + fmt(Math.abs(ch), 0) + "%)");
+    if (R.reduced) bigNum.text(f0(sDopo));
+    else { bigNum.text(f0(0)); R.onFirstView(document.getElementById("big"), function () { R.countUp(bigNum, sDopo, f0, "play"); }); }
+
+    var host = document.getElementById("bo");
+    var tip = R.tooltip(host);
+    var clear = function () {};
+    R.dismissOutside(host, function () { tip.hide(); clear(); });
+
+    R.responsive(host, function (W, phase) {
+      var narrow = R.isNarrow(W);
+      var m = { top: 44, right: 0, bottom: 28, left: 0 };
+      var H = narrow ? 290 : 330;
+      var w = W - m.left - m.right, h = H - m.top - m.bottom;
+      var x = d3.scaleBand().domain(data.map(function (d) { return d.k; })).range([0, w]).paddingInner(narrow ? 0.18 : 0.28).paddingOuter(0.02);
+      var y = d3.scaleLinear().domain([0, d3.max(data, function (d) { return d.v; })]).range([h, 0]);
+      var isAfter = function (d) { return +d.k >= +START; };
+
+      d3.select(host).select("svg").remove();
+      var svg = d3.select(host).insert("svg", ".r-tip").attr("width", W).attr("height", H).attr("role", "img")
+        .attr("aria-label", "Grafico a barre: nel comune di Bologna i morti in strada sono stati " + dopo.map(function (d) { return f0(d.v) + " nel " + d.k; }).join(" e ") +
+          ", contro una media di " + fmt(avgPre, 1) + " all'anno tra il " + data[0].k + " e il " + data[i0 - 1].k + ".");
+      svg.append("title").text("Morti in strada nel comune di Bologna per anno");
+      var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+
+      g.append("line").attr("class", "baseline").attr("x1", 0).attr("x2", w).attr("y1", h + 0.5).attr("y2", h + 0.5);
+
+      // media prima della Città 30
+      var an0 = g.append("g").attr("class", "anno");
+      var xEnd = x(data[i0 - 1].k) + x.bandwidth();
+      an0.append("path").attr("class", "dash").attr("d", "M0," + y(avgPre) + "H" + xEnd);
+
+      var bars = g.append("g").selectAll("path").data(data).join("path").attr("class", "mark")
+        .style("fill", function (d) { return isAfter(d) ? "var(--blue)" : "var(--grey-4)"; });
+      R.enter(bars, phase,
+        function (s) { s.attr("d", function (d) { return R.barPathV(x(d.k), h, x.bandwidth(), 0, 2); }); },
+        function (s) { var f = function (d, t) { var yv = y(d.v * t); return R.barPathV(x(d.k), yv, x.bandwidth(), h - yv, 2); };
+          if (s.attrTween) s.attrTween("d", function (d) { return function (t) { return f(d, t); }; }); else s.attr("d", function (d) { return f(d, 1); }); });
+
+      var vals = g.append("g").selectAll("text").data(dopo).join("text").attr("class", "val-label mark")
+        .attr("text-anchor", "middle").attr("x", function (d) { return x(d.k) + x.bandwidth() / 2; })
+        .attr("y", function (d) { return y(d.v) - 6; })
+        .classed("val-label--muted", function (d) { return !isAfter(d); });
+      vals.each(function (d) { R.countUp(d3.select(this), d.v, f0, phase); });
+
+      g.append("g").selectAll("text").data(data.filter(function (d, i) { return !narrow || i % 3 === 0 || isAfter(d); })).join("text")
+        .attr("class", "tick-label").attr("text-anchor", "middle")
+        .attr("x", function (d) { return x(d.k) + x.bandwidth() / 2; }).attr("y", h + 18)
+        .text(function (d) { return narrow ? "’" + d.k.slice(2) : d.k; });
+
+      // annotazioni: inizio Città 30 e media precedente
+      var an = g.append("g").attr("class", "anno");
+      var xs = x(START) - x.step() * x.paddingInner() / 2;
+      an.append("path").attr("d", "M" + xs + "," + (h) + "V" + (-m.top + 18));
+      an.append("text").attr("x", xs - 6).attr("y", -m.top + 30).attr("text-anchor", "end").append("tspan").attr("class", "em").text("Città 30");
+      an.append("text").attr("x", 4).attr("y", y(avgPre) - 8)
+        .text("Media " + data[0].k + "-" + data[i0 - 1].k + ": " + fmt(avgPre, 1) + " morti l'anno");
+      R.enter(an, phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", 1); }, R.DUR * 0.7);
+
+      clear = function () { bars.classed("is-dimmed", false); vals.classed("is-dimmed", false); };
+      g.append("g").selectAll("rect").data(data).join("rect").attr("class", "hit")
+        .attr("x", function (d) { return x(d.k) - x.step() * x.paddingInner() / 2; }).attr("width", x.step())
+        .attr("y", -m.top).attr("height", h + m.top + m.bottom)
+        .on("pointerenter pointerdown", function (ev, d) {
+          bars.classed("is-dimmed", function (q) { return q !== d; });
+          vals.classed("is-dimmed", function (q) { return q !== d; });
+          tip.show(R.tipHTML({ title: d.k, value: f0(d.v), unit: "morti", note: isAfter(d) ? "Con la Città 30" : (d.k === "2020" ? "Anno della pandemia" : null) }),
+            x(d.k) + x.bandwidth() / 2, y(d.v) + m.top);
+        })
+        .on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); clear(); } });
+    });
+  }).catch(function (e) { R.fail("#bo", e); });
+})();
+</script>
+</body>
+</html>

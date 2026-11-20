@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Piste ciclabili, il divario tra Nord e Sud – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">Al Nord le piste crescono, al Sud restano poche</h1>
+    <p class="r-sub">Km di piste ciclabili ogni 100 km² di superficie comunale, media dei comuni capoluogo per area</p>
+  </header>
+
+  <figure class="r-chart" id="divario"></figure>
+
+  <footer class="r-foot">
+    <span>Fonte: Istat, Ambiente urbano 2024, tavola 20.1</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt, f1 = function (v) { return fmt(v, 1); };
+  var SERIE = [
+    { k: "Nord", col: "var(--blue)" },
+    { k: "Centro", col: "var(--grey)" },
+    { k: "Mezzogiorno", col: "var(--red)" }
+  ];
+
+  R.loadCSV("../data/divario-territoriale.csv").then(function (raw) {
+    var anni = raw.map(function (r) { return +r["Anno"]; });
+    var series = SERIE.map(function (s) {
+      return { k: s.k, col: s.col, pts: raw.map(function (r) { return { a: +r["Anno"], v: R.num(r[s.k]) }; }) };
+    });
+    var nord = series[0], mezz = series[2];
+    var n1 = nord.pts[nord.pts.length - 1], m1 = mezz.pts[mezz.pts.length - 1], m0 = mezz.pts[0], n0 = nord.pts[0];
+
+    var host = document.getElementById("divario");
+    var tip = R.tooltip(host);
+    R.dismissOutside(host, function () { tip.hide(); });
+
+    R.responsive(host, function (W, phase) {
+      var narrow = R.isNarrow(W);
+      var m = { top: 20, right: narrow ? 64 : 110, bottom: 28, left: 34 };
+      var H = narrow ? 300 : 360;
+      var w = W - m.left - m.right, h = H - m.top - m.bottom;
+      var x = d3.scaleLinear().domain(d3.extent(anni)).range([0, w]);
+      var y = d3.scaleLinear().domain([0, 80]).range([h, 0]);
+      var ticks = [0, 20, 40, 60, 80];
+
+      d3.select(host).select("svg").remove();
+      var svg = d3.select(host).insert("svg", ".r-tip").attr("width", W).attr("height", H).attr("role", "img")
+        .attr("aria-label", "Grafico a linee: dal " + n0.a + " al " + n1.a + " la densità delle piste ciclabili nei capoluoghi del Nord sale da " +
+          f1(n0.v) + " a " + f1(n1.v) + " km ogni 100 km², nel Mezzogiorno da " + f1(m0.v) + " a " + f1(m1.v) + ".");
+      svg.append("title").text("Densità delle piste ciclabili per area, " + n0.a + "-" + n1.a);
+      var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+
+      g.append("g").attr("class", "grid").selectAll("line").data(ticks).join("line")
+        .attr("x1", -m.left).attr("x2", w)
+        .attr("y1", function (d) { return Math.round(y(d)) + 0.5; }).attr("y2", function (d) { return Math.round(y(d)) + 0.5; })
+        .attr("class", function (d) { return d === 0 ? "baseline" : null; });
+      g.append("g").selectAll("text").data(ticks.filter(function (d) { return d > 0; })).join("text").attr("class", "tick-label")
+        .attr("x", -m.left).attr("y", function (d) { return y(d) - 5; }).text(function (d) { return d; });
+      g.append("g").selectAll("text").data(anni.filter(function (a, i) { return !narrow || i % 2 === 1 || i === 0; })).join("text")
+        .attr("class", "tick-label").attr("text-anchor", "middle")
+        .attr("x", function (a) { return x(a); }).attr("y", h + 18).text(function (a) { return narrow ? "’" + String(a).slice(2) : a; });
+
+      var line = d3.line().curve(d3.curveMonotoneX).x(function (p) { return x(p.a); }).y(function (p) { return y(p.v); });
+      var paths = g.append("g").selectAll("path").data(series).join("path").attr("class", "mark")
+        .attr("d", function (s) { return line(s.pts); })
+        .style("fill", "none").style("stroke", function (s) { return s.col; }).style("stroke-width", 2.5);
+      R.enter(paths, phase,
+        function (s) { s.each(function () { var L = this.getTotalLength(); d3.select(this).attr("stroke-dasharray", L + " " + L).attr("stroke-dashoffset", L); }); },
+        function (s) { s.attr("stroke-dashoffset", 0); });
+
+      var ends = g.append("g").selectAll("g").data(series).join("g").attr("class", "mark");
+      ends.append("circle").attr("r", 3.5).attr("cx", function (s) { return x(s.pts[s.pts.length - 1].a); })
+        .attr("cy", function (s) { return y(s.pts[s.pts.length - 1].v); }).style("fill", function (s) { return s.col; });
+      var lab = ends.append("text").attr("class", "series-label").attr("x", w + 8)
+        .attr("y", function (s, i) { var v = y(s.pts[s.pts.length - 1].v); return i === 2 ? v + 6 : (i === 1 ? v - 6 : v); })
+        .attr("dy", "0.35em").style("fill", function (s) { return s.col; });
+      lab.append("tspan").text(function (s) { return f1(s.pts[s.pts.length - 1].v); });
+      lab.append("tspan").attr("class", "series-label--sub").attr("dx", 5).style("fill", "var(--ink-2)")
+        .text(function (s) { return narrow ? "" : s.k; });
+      if (narrow) {
+        g.append("g").selectAll("text").data(series).join("text").attr("class", "series-label")
+          .attr("x", function (s) { return x(s.pts[1].a); })
+          .attr("y", function (s, i) { return y(s.pts[1].v) + (i === 2 ? 16 : -10); })
+          .style("fill", function (s) { return s.col; }).text(function (s) { return s.k; });
+      }
+      R.enter(ends, phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", 1); }, R.DUR * 0.8);
+
+      // annotazione: rapporto Nord/Mezzogiorno
+      var an = g.append("g").attr("class", "anno");
+      var ax = x(n1.a) - (narrow ? 4 : 10);
+      an.append("path").attr("class", "dash").attr("d", "M" + ax + "," + y(n1.v) + "V" + y(m1.v));
+      var ratio = Math.round(n1.v / m1.v);
+      var t = an.append("text").attr("x", ax - 8).attr("y", y((n1.v + m1.v) / 2)).attr("text-anchor", "end");
+      t.append("tspan").attr("class", "em").attr("x", ax - 8).text("Quasi " + ratio + " volte");
+      t.append("tspan").attr("x", ax - 8).attr("dy", 17).text("la densità del Mezzogiorno");
+      R.enter(an, phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", 1); }, R.DUR);
+
+      g.append("g").selectAll("rect").data(anni).join("rect").attr("class", "hit")
+        .attr("x", function (a) { return x(a) - w / (anni.length - 1) / 2; }).attr("width", w / (anni.length - 1))
+        .attr("y", 0).attr("height", h)
+        .on("pointerenter pointerdown pointermove", function (ev, a) {
+          var rows = series.map(function (s) { var p = s.pts.find(function (q) { return q.a === a; }); return [s.k, f1(p.v) + " km"]; });
+          tip.show(R.tipHTML({ title: String(a), value: rows[0][1], unit: "ogni 100 km² al Nord", rows: rows.slice(1) }),
+            x(a) + m.left, y(nord.pts.find(function (q) { return q.a === a; }).v) + m.top);
+        })
+        .on("pointerleave", function (ev) { if (ev.pointerType === "mouse") tip.hide(); });
+    });
+  }).catch(function (e) { R.fail("#divario", e); });
+})();
+</script>
+</body>
+</html>

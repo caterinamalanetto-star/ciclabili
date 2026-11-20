@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Torino, Milano e Bologna: piste e incidenti – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+<style>
+  .tc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; margin-top: 28px; }
+  @media (max-width: 519px) { .tc-grid { grid-template-columns: 1fr; gap: 30px; } }
+  .tc-city { margin: 0; }
+  .tc-name { font-family: var(--serif); font-weight: 700; font-size: 24px; line-height: 1.1; color: var(--title); margin: 0 0 4px; }
+  .tc-big { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .tc-big small { display: block; font-size: 12px; font-weight: 400; letter-spacing: 0; color: var(--ink-2); margin-top: 4px; }
+  .tc-m { margin-top: 16px; }
+  .tc-m__l { font-size: 12px; color: var(--ink-2); margin: 0 0 4px; }
+  .tc-m svg { display: block; overflow: visible; }
+  .tc-m text { font-size: 12px; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">Tre città con tante piste, tre bilanci diversi</h1>
+    <p class="r-sub">Le tre grandi città con la rete ciclabile più densa: piste, incidenti con bici e monopattini, morti in strada. Valori assoluti, non rapportati alla popolazione</p>
+  </header>
+
+  <div class="tc-grid" id="tc"></div>
+
+  <footer class="r-foot">
+    <span>Fonte: Istat, Ambiente urbano 2024 (tav. 20.1-20.2); Istat-ACI, Incidenti stradali 2025 (tav. 3.4 e 4.6)</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt, f0 = function (v) { return fmt(v, 0); }, f1 = function (v) { return fmt(v, 1); };
+
+  R.loadCSV("../data/tre-citta.csv").then(function (raw) {
+    var data = raw.map(function (r) {
+      return {
+        k: r["Città"], dens: R.num(r["Densità piste 2024 (km/100 km²)"]),
+        km19: R.num(r["Km piste 2019"]), km24: R.num(r["Km piste 2024"]),
+        inc: R.num(r["Bici e monopattini coinvolti in incidenti 2025"]),
+        m19: R.num(r["Morti in strada 2019"]), m25: R.num(r["Morti in strada 2025"])
+      };
+    });
+    // scale comuni alle tre città, così i confronti sono onesti
+    var maxKm = d3.max(data, function (d) { return Math.max(d.km19, d.km24); });
+    var maxInc = d3.max(data, function (d) { return d.inc; });
+    var maxM = d3.max(data, function (d) { return Math.max(d.m19, d.m25); });
+
+    var grid = d3.select("#tc");
+    var cards = grid.selectAll("figure").data(data).join("figure").attr("class", "tc-city")
+      .attr("aria-label", function (d) {
+        return d.k + ": " + f1(d.dens) + " km di piste ogni 100 km², rete passata da " + f0(d.km19) + " a " + f0(d.km24) +
+          " km tra 2019 e 2024; " + f0(d.inc) + " bici e monopattini coinvolti in incidenti nel 2025; morti in strada da " + d.m19 + " nel 2019 a " + d.m25 + " nel 2025.";
+      });
+    cards.append("p").attr("class", "tc-name").text(function (d) { return d.k; });
+    cards.append("div").attr("class", "tc-big").html(function (d) { return f1(d.dens) + "<small>km di piste ogni 100 km², 2024</small>"; });
+
+    var metrics = [
+      { lab: "Km di piste, 2019 e 2024", max: maxKm, a: function (d) { return d.km19; }, b: function (d) { return d.km24; }, fa: f0, fb: function (v) { return f0(v) + " km"; }, col: "var(--blue)" },
+      { lab: "Morti in strada nel comune, 2019 e 2025", max: maxM, a: function (d) { return d.m19; }, b: function (d) { return d.m25; }, fa: f0, fb: f0, col: "var(--grey-2)" },
+      { lab: "Bici e monopattini coinvolti in incidenti, 2025", max: maxInc, a: null, b: function (d) { return d.inc; }, fb: f0, col: "var(--red)" }
+    ];
+
+    function draw(phase) {
+      cards.each(function (d) {
+        var card = d3.select(this);
+        card.selectAll(".tc-m").remove();
+        var W = Math.floor(this.getBoundingClientRect().width);
+        metrics.forEach(function (mt) {
+          var box = card.append("div").attr("class", "tc-m");
+          box.append("p").attr("class", "tc-m__l").text(mt.lab);
+          var rows = mt.a ? [{ v: mt.a(d), old: true }, { v: mt.b(d), old: false }] : [{ v: mt.b(d), old: false }];
+          var bh = 12, gap = 4, H = rows.length * (bh + gap);
+          var x = d3.scaleLinear().domain([0, mt.max]).range([0, W - 64]);
+          var svg = box.append("svg").attr("width", W).attr("height", H).attr("aria-hidden", "true");
+          var bars = svg.selectAll("path").data(rows).join("path")
+            .style("fill", function (r) { return r.old ? "var(--grey-5)" : mt.col; });
+          R.enter(bars, phase,
+            function (s) { s.attr("d", function (r, i) { return R.barPathH(0, i * (bh + gap), 0, bh, 2); }); },
+            function (s) { var f = function (r, t) { var i = rows.indexOf(r); return R.barPathH(0, i * (bh + gap), Math.max(1, x(r.v) * t), bh, 2); };
+              if (s.attrTween) s.attrTween("d", function (r) { return function (t) { return f(r, t); }; }); else s.attr("d", function (r) { return f(r, 1); }); });
+          svg.selectAll("text").data(rows).join("text")
+            .attr("x", function (r) { return x(r.v) + 6; }).attr("y", function (r, i) { return i * (bh + gap) + bh / 2; }).attr("dy", "0.35em")
+            .style("fill", function (r) { return r.old ? "var(--ink-2)" : "var(--ink)"; })
+            .style("font-weight", function (r) { return r.old ? 400 : 600; })
+            .text(function (r) { return r.old ? mt.fa(r.v) : mt.fb(r.v); });
+        });
+      });
+    }
+    R.responsive(document.getElementById("tc"), function (W, phase) { draw(phase); });
+  }).catch(function (e) { R.fail("#tc", e); });
+})();
+</script>
+</body>
+</html>

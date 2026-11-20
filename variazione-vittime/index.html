@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vittime della strada per tipo di utente – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">Tra le vittime della strada, i ciclisti sono quelli che aumentano di più</h1>
+    <p class="r-sub">Variazione dei morti in incidenti stradali tra il 2024 e il 2025, per tipo di utente della strada</p>
+  </header>
+
+  <figure class="r-chart" id="var"></figure>
+
+  <footer class="r-foot">
+    <span>Fonte: Istat-ACI, Incidenti stradali 2025, tavola 4.9</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt, f0 = function (v) { return fmt(v, 0); };
+  var sgn = function (v) { return (v > 0 ? "+" : v < 0 ? "−" : "") + fmt(Math.abs(v), 1) + "%"; };
+
+  R.loadCSV("../data/variazione-vittime.csv").then(function (raw) {
+    var data = raw.map(function (r) {
+      var a = R.num(r["Morti 2024"]), b = R.num(r["Morti 2025"]);
+      return { k: r["Utenti"], a: a, b: b, v: (b / a - 1) * 100 };
+    }).sort(function (p, q) { return q.v - p.v; });
+    var bici = data.find(function (d) { return /^Ciclisti/.test(d.k); });
+
+    var host = document.getElementById("var");
+    var tip = R.tooltip(host);
+    var clear = function () {};
+    R.dismissOutside(host, function () { tip.hide(); clear(); });
+
+    R.responsive(host, function (W, phase) {
+      var narrow = R.isNarrow(W);
+      var labW = narrow ? 0 : 230;
+      var row = narrow ? 46 : 34, bh = 18;
+      var m = { top: 4, right: 8, bottom: 4, left: labW };
+      var w = W - m.left - m.right;
+      var H = m.top + m.bottom + row * data.length;
+      var ext = d3.max(data, function (d) { return Math.abs(d.v); });
+      var x = d3.scaleLinear().domain([-ext, ext]).range([44, w - 44]);
+      var yy = function (i) { return i * row + (narrow ? 20 : (row - bh) / 2); };
+      var col = function (d) { return d === bici ? "var(--red)" : (d.v > 0 ? "var(--grey-3)" : "var(--grey-4)"); };
+
+      d3.select(host).select("svg").remove();
+      var svg = d3.select(host).insert("svg", ".r-tip").attr("width", W).attr("height", H).attr("role", "img")
+        .attr("aria-label", "Grafico a barre: tra il 2024 e il 2025 i morti in bicicletta aumentano del " + fmt(bici.v, 1) +
+          "%, mentre calano tra pedoni, automobilisti, motociclisti e ciclomotoristi.");
+      svg.append("title").text("Variazione dei morti per tipo di utente, 2024-2025");
+      var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+
+      g.append("g").selectAll("text").data(data).join("text").attr("class", "tick-label")
+        .attr("x", narrow ? 0 : -labW).attr("y", function (d, i) { return narrow ? yy(i) - 7 : yy(i) + bh / 2; })
+        .attr("dy", narrow ? 0 : "0.35em")
+        .style("fill", function (d) { return d === bici ? "var(--ink)" : null; })
+        .style("font-weight", function (d) { return d === bici ? 600 : null; })
+        .text(function (d) { return d.k; });
+      g.append("line").attr("class", "baseline").attr("x1", Math.round(x(0)) + 0.5).attr("x2", Math.round(x(0)) + 0.5)
+        .attr("y1", 0).attr("y2", H - m.top - m.bottom);
+
+      var bars = g.append("g").selectAll("rect").data(data).join("rect").attr("class", "mark")
+        .attr("y", function (d, i) { return yy(i); }).attr("height", bh).attr("rx", 2)
+        .style("fill", col);
+      R.enter(bars, phase,
+        function (s) { s.attr("x", x(0)).attr("width", 0); },
+        function (s) { s.attr("x", function (d) { return Math.min(x(0), x(d.v)); }).attr("width", function (d) { return Math.abs(x(d.v) - x(0)); }); });
+
+      var vals = g.append("g").selectAll("text").data(data).join("text").attr("class", "val-label mark")
+        .attr("x", function (d) { return d.v >= 0 ? x(d.v) + 6 : x(d.v) - 6; })
+        .attr("text-anchor", function (d) { return d.v >= 0 ? "start" : "end"; })
+        .attr("y", function (d, i) { return yy(i) + bh / 2; }).attr("dy", "0.35em")
+        .style("fill", function (d) { return d === bici ? "var(--red)" : null; })
+        .text(function (d) { return sgn(d.v); });
+      R.enter(vals, phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", 1); }, R.DUR * 0.6);
+
+      clear = function () { bars.classed("is-dimmed", false); vals.classed("is-dimmed", false); };
+      g.append("g").selectAll("rect").data(data).join("rect").attr("class", "hit")
+        .attr("x", -labW).attr("width", W).attr("y", function (d, i) { return i * row; }).attr("height", row)
+        .on("pointerenter pointerdown", function (ev, d) {
+          bars.classed("is-dimmed", function (q) { return q !== d; });
+          vals.classed("is-dimmed", function (q) { return q !== d; });
+          var i = data.indexOf(d);
+          tip.show(R.tipHTML({ title: d.k, value: sgn(d.v), unit: "sul 2024",
+            rows: [["Morti nel 2024", f0(d.a)], ["Morti nel 2025", f0(d.b)]] }), x(d.v) + m.left, yy(i) + m.top);
+        })
+        .on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); clear(); } });
+    });
+  }).catch(function (e) { R.fail("#var", e); });
+})();
+</script>
+</body>
+</html>
