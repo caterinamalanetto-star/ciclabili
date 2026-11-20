@@ -74,6 +74,15 @@
 <script>
 (function () {
   var R = Radar, fmt = R.fmt, f0 = function (v) { return fmt(v, 0); }, f1 = function (v) { return fmt(v, 1); };
+  // nomi in italiano sulla mappa di base (OpenMapTiles ha il campo name:it; se manca, il nome locale)
+  function itLabels(m) {
+    var IT = ["coalesce", ["get", "name:it"], ["get", "name:latin"], ["get", "name"]];
+    (m.getStyle().layers || []).forEach(function (l) {
+      if (l.type !== "symbol" || !l.layout || !l.layout["text-field"]) return;
+      if (JSON.stringify(l.layout["text-field"]).indexOf("name") === -1) return;
+      try { m.setLayoutProperty(l.id, "text-field", IT); } catch (e) {}
+    });
+  }
   var STYLE = { light: "https://tiles.openfreemap.org/styles/positron", dark: "https://tiles.openfreemap.org/styles/dark" };
   var ALL = [
     { k: "Torino", a: [7.6784, 45.0619], aN: "dalla stazione di Porta Nuova", b: [7.6976, 45.0700], bN: "a Vanchiglia" },
@@ -254,7 +263,7 @@
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     map.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: "Elaborazione Radar – QN" }), "bottom-right");
     map.__style = STYLE[theme()];
-    map.on("style.load", function () { addLayers(); if (route) drawRoute(route); });
+    map.on("style.load", function () { itLabels(map); addLayers(); if (route) drawRoute(route); });
     map.on("click", function (e) {
       var c = cities[cur]; if (!c || !c.g) return;
       var p = [e.lngLat.lng, e.lngLat.lat]; exName = null;
