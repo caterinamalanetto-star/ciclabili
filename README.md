@@ -22,6 +22,12 @@ Dati in `data/` (CSV con `;` e virgola decimale). Le mappe `reti-citta` e `dove-
 
 Estrazione Overpass del 20/11/2026. Separati dalle auto: `highway=cycleway` (inclusi gli attraversamenti ciclabili) o `cycleway*=track`. Corsie dipinte: `cycleway*=lane`. Esclusi `shared_lane` (solo segnaletica). Lunghezze sulle linee della strada. Tratti collegati se distano al massimo 15 m. Script: `strumenti/reti-osm.py`.
 
+## Sfondo, tema e logo
+
+Le dataviz seguono lo stile Radar aggiornato: il logo QN compare da solo in alto a destra, e lo sfondo si adatta a quello che c'è dietro l'iframe (grigio `#f7f8f9`, bianco, nero `#121212`, notte `#060e11`), con il tema chiaro o scuro deciso dalla luminosità dello sfondo. Lo manda lo script del CMS; senza script si può forzare con `?bg=grigio`, `?bg=bianco`, `?bg=nero` o `?bg=notte` nell'URL dell'iframe.
+
+Lo script del CMS è la versione v3 (`assets/embed.min.js`): non contiene i caratteri minore, maggiore ed e commerciale, che alcuni CMS riscrivono, e chiede l'altezza ai grafici anche se parte in ritardo.
+
 ## Snippet per il CMS
 
 ### Le reti ciclabili di Torino, Milano e Bologna
