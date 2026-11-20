@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dove arrivi in bici da qui? – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="../assets/radar.js"></script>
+<style>
+  .da-nav { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 22px; }
+  .da-tab { font: 600 14px/1 var(--sans); color: var(--ink-2); background: var(--bg); cursor: pointer;
+    border: 1px solid var(--rule); border-radius: 999px; padding: 8px 14px; }
+  .da-tab[aria-selected="true"] { color: var(--bg); background: var(--ink); border-color: var(--ink); }
+  .da-tab:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .da-res { margin-top: 16px; min-height: 92px; display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; align-items: end; }
+  .da-big { font-size: 44px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .da-big small { font-size: 20px; font-weight: 600; }
+  .da-txt { font-size: 14px; line-height: 1.45; color: var(--ink-2); align-self: end; }
+  .da-txt b { color: var(--ink); }
+  .da-sub { grid-column: 1 / -1; font-size: 13px; color: var(--ink-2); margin-top: 4px; }
+  @media (max-width: 519px) { .da-res { grid-template-columns: 1fr; } .da-big { font-size: 38px; } }
+  #map { width: 100%; margin-top: 12px; border-radius: 4px; overflow: hidden; background: var(--rule); }
+  #map .maplibregl-canvas { cursor: crosshair; }
+  .da-pin { width: 16px; height: 16px; border-radius: 50%; background: var(--ink); border: 3px solid var(--bg); box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+  .rc-key { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 13px; color: var(--ink-2); }
+  .rc-key i { display: inline-block; width: 16px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: 3px; }
+  .da-note { font-size: 12px; line-height: 1.45; color: var(--ink-2); margin: 14px 0 0; }
+  .maplibregl-ctrl-attrib { font-size: 10px; }
+</style>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">Dove arrivi in bici, da qui, senza finire nel traffico?</h1>
+    <p class="r-sub">Clicca o tocca un punto della mappa, per esempio vicino a casa tua: si illumina la rete di piste separate dalle auto che puoi raggiungere senza interruzioni</p>
+  </header>
+
+  <div class="da-nav" role="tablist" id="tabs" aria-label="Scegli la città"></div>
+
+  <div class="da-res" id="res" aria-live="polite"></div>
+
+  <div id="map" role="application" aria-label="Mappa interattiva: clicca un punto per vedere la rete ciclabile protetta raggiungibile da lì"></div>
+
+  <div class="rc-key">
+    <span><i style="background:var(--blue-2)"></i>Piste protette raggiungibili dal punto scelto</span>
+    <span><i style="background:var(--grey-4)"></i>Altre piste protette, staccate</span>
+    <span><i style="background:var(--red)"></i>Corsie solo dipinte</span>
+  </div>
+
+  <p class="da-note">Sono considerate raggiungibili le piste separate dalle auto collegate tra loro, anche attraverso un attraversamento di al massimo 15 metri. Il punto di partenza è collegato alla pista protetta più vicina entro un chilometro, escludendo i frammenti più corti di 100 metri. I tempi sono calcolati a 15 km/h, la velocità media di chi pedala in città. Dati OpenStreetMap, mappati da volontari: qualche tratto può mancare.</p>
+
+  <footer class="r-foot">
+    <span>Fonte: elaborazione su dati © OpenStreetMap contributors (ODbL), 19-20 novembre 2026. Base cartografica OpenFreeMap / OpenMapTiles</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt, f0 = function (v) { return fmt(v, 0); }, f1 = function (v) { return fmt(v, 1); };
+  var STYLE = { light: "https://tiles.openfreemap.org/styles/positron", dark: "https://tiles.openfreemap.org/styles/dark" };
+  var CITIES = [
+    { k: "Torino", start: [7.6853, 45.0711], startName: "piazza Castello" },
+    { k: "Milano", start: [9.1900, 45.4642], startName: "piazza del Duomo" },
+    { k: "Bologna", start: [11.3426, 44.4938], startName: "piazza Maggiore" }
+  ];
+  var MAXD = 1000, SPEED = 15; // metri, km/h
+  var root = document.documentElement, mapEl = document.getElementById("map");
+  var css = function (v) { return getComputedStyle(root).getPropertyValue(v).trim(); };
+  var theme = function () { return root.getAttribute("data-theme") === "dark" ? "dark" : "light"; };
+  var cur = 0, map, pin = null, sel = null;
+
+  function dist(a, b) {
+    var r = Math.PI / 180, dl = (b[0] - a[0]) * r, dp = (b[1] - a[1]) * r;
+    var h = Math.sin(dp / 2) * Math.sin(dp / 2) + Math.cos(a[1] * r) * Math.cos(b[1] * r) * Math.sin(dl / 2) * Math.sin(dl / 2);
+    return 2 * 6371008.8 * Math.asin(Math.sqrt(h));
+  }
+  // distanza da un punto a un segmento (approssimazione piana locale, adatta a poche centinaia di metri)
+  function distSeg(p, a, b) {
+    var kx = Math.cos(p[1] * Math.PI / 180) * 111320, ky = 110540;
+    var ax = (a[0] - p[0]) * kx, ay = (a[1] - p[1]) * ky, bx = (b[0] - p[0]) * kx, by = (b[1] - p[1]) * ky;
+    var dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy, t = L ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L)) : 0;
+    var x = ax + t * dx, y = ay + t * dy;
+    return { d: Math.sqrt(x * x + y * y), pt: [p[0] + x / kx, p[1] + y / ky] };
+  }
+
+  Promise.all(CITIES.map(function (c) {
+    return Promise.all([d3.json("../data/rete-" + c.k.toLowerCase() + ".geojson"), d3.json("../data/componenti-" + c.k.toLowerCase() + ".json")]);
+  })).then(function (res) {
+    CITIES.forEach(function (c, i) {
+      var g = res[i][0];
+      c.comps = res[i][1];
+      c.tot = c.comps.reduce(function (s, v) { return s + v; }, 0);
+      c.fc = { type: "FeatureCollection", features: g.features.filter(function (f) { return f.properties.t !== "percorso"; }) };
+      c.prot = c.fc.features.filter(function (f) { return f.properties.c != null; });
+      var b = [180, 90, -180, -90];
+      c.fc.features.forEach(function (f) { f.geometry.coordinates.forEach(function (p) {
+        if (p[0] < b[0]) b[0] = p[0]; if (p[1] < b[1]) b[1] = p[1]; if (p[0] > b[2]) b[2] = p[0]; if (p[1] > b[3]) b[3] = p[1]; }); });
+      c.bounds = [[b[0], b[1]], [b[2], b[3]]];
+    });
+    build();
+  }).catch(function (e) { R.fail("#map", e); });
+
+  function nearest(c, p) {
+    var best = { d: Infinity };
+    c.prot.forEach(function (f) {
+      if (c.comps[f.properties.c] < 100) return; // ignora frammenti di pochi metri
+      var co = f.geometry.coordinates;
+      for (var i = 1; i < co.length; i++) {
+        // scarto veloce dei segmenti lontani
+        if (Math.abs(co[i][1] - p[1]) > 0.02 && Math.abs(co[i - 1][1] - p[1]) > 0.02) continue;
+        var r = distSeg(p, co[i - 1], co[i]);
+        if (r.d < best.d) best = { d: r.d, pt: r.pt, f: f };
+      }
+    });
+    return best;
+  }
+
+  function build() {
+    d3.select("#tabs").selectAll("button").data(CITIES).join("button").attr("class", "da-tab").attr("role", "tab")
+      .text(function (c) { return c.k; }).on("click", function (ev, c) { show(CITIES.indexOf(c)); });
+    var W = mapEl.clientWidth;
+    mapEl.style.height = Math.round(W * (R.isNarrow(W) ? 1.15 : 0.72)) + "px";
+    map = new maplibregl.Map({
+      container: "map", style: STYLE[theme()], bounds: CITIES[0].bounds, fitBoundsOptions: { padding: 24 },
+      attributionControl: false, cooperativeGestures: true, dragRotate: false, pitchWithRotate: false, touchPitch: false,
+      locale: {
+        "CooperativeGesturesHandler.WindowsHelpText": "Usa Ctrl + rotellina per ingrandire la mappa",
+        "CooperativeGesturesHandler.MacHelpText": "Usa ⌘ + rotellina per ingrandire la mappa",
+        "CooperativeGesturesHandler.MobileHelpText": "Usa due dita per spostare la mappa",
+        "NavigationControl.ZoomIn": "Ingrandisci", "NavigationControl.ZoomOut": "Riduci"
+      }
+    });
+    map.touchZoomRotate.disableRotation();
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: "Elaborazione Radar – QN" }), "bottom-right");
+    map.__style = STYLE[theme()];
+    map.on("style.load", addLayers);
+    map.on("click", function (e) { pick([e.lngLat.lng, e.lngLat.lat], null); });
+    new MutationObserver(function () {
+      var want = STYLE[theme()];
+      if (map.__style !== want) { map.__style = want; map.setStyle(want, { diff: false }); }
+    }).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    tabs();
+    R.scheduleHeight();
+  }
+
+  function tabs() {
+    d3.selectAll(".da-tab").attr("aria-selected", function (c) { return c === CITIES[cur]; });
+  }
+
+  function addLayers() {
+    var c = CITIES[cur];
+    var col = { on: css("--blue-2"), off: css("--grey-4"), lane: css("--red") };
+    var w = function (x) { return ["interpolate", ["linear"], ["zoom"], 11, x, 14, x * 1.8, 17, x * 3.5]; };
+    map.addSource("rete", { type: "geojson", data: c.fc });
+    map.addLayer({ id: "corsie", type: "line", source: "rete", filter: ["==", ["get", "t"], "corsia"],
+      layout: { "line-cap": "round" }, paint: { "line-color": col.lane, "line-width": w(1.6), "line-opacity": 0.75 } });
+    map.addLayer({ id: "off", type: "line", source: "rete", filter: ["has", "c"],
+      layout: { "line-cap": "round" }, paint: { "line-color": col.off, "line-width": w(1.4) } });
+    map.addLayer({ id: "on", type: "line", source: "rete", filter: ["==", ["get", "c"], -1],
+      layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": col.on, "line-width": w(2.6) } });
+    map.addSource("link", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    map.addLayer({ id: "link", type: "line", source: "link", paint: { "line-color": css("--ink"), "line-width": 1.5, "line-dasharray": [1.5, 1.5] } });
+    if (sel) apply(sel); else pick(c.start, c.startName);
+  }
+
+  function pick(p, placeName) {
+    var c = CITIES[cur], n = nearest(c, p);
+    if (!pin) { var el = document.createElement("div"); el.className = "da-pin"; pin = new maplibregl.Marker({ element: el }); }
+    pin.setLngLat(p).addTo(map);
+    sel = { p: p, n: n, name: placeName };
+    apply(sel);
+  }
+
+  function apply(s) {
+    var c = CITIES[cur], n = s.n, res = d3.select("#res");
+    if (!map.getSource("rete")) return;
+    if (!n.f || n.d > MAXD) {
+      map.setFilter("on", ["==", ["get", "c"], -1]);
+      map.getSource("link").setData({ type: "FeatureCollection", features: [] });
+      res.html('<div class="da-big">0 <small>km</small></div><div class="da-txt">Nel raggio di un chilometro da qui non c\'è nessuna pista separata dalle auto.' +
+        (n.f ? " La più vicina è a <b>" + fmt(n.d / 1000, 1) + " km</b>." : "") + "</div>");
+      return R.scheduleHeight();
+    }
+    var cid = n.f.properties.c, km = c.comps[cid] / 1000, share = c.comps[cid] / c.tot;
+    var min = km / SPEED * 60;
+    map.setFilter("on", ["==", ["get", "c"], cid]);
+    map.getSource("link").setData({ type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [s.p, n.pt] } }] });
+    var where = s.name ? "Da " + s.name : "Da qui";
+    var kmTxt = km < 1 ? f0(Math.round(km * 100) * 10) + " metri" : (km >= 10 ? f0(km) : f1(km)) + " km";
+    var big = km < 1 ? f0(Math.round(km * 100) * 10) + " <small>metri</small>" : (km >= 10 ? f0(km) : f1(km)) + " <small>km</small>";
+    var shTxt = share < 0.01 ? "meno dell'1%" : (Math.round(share * 100) === 8 || Math.round(share * 100) === 11 ? "l'" : "il ") + f0(share * 100) + "%";
+    var m = Math.max(1, Math.round(min));
+    var tempo = min >= 90 ? fmt(Math.round(min / 6) / 10, Math.round(min / 6) % 10 ? 1 : 0) + " ore" : m + (m === 1 ? " minuto" : " minuti");
+    res.html('<div class="da-big">' + big + '</div>' +
+      '<div class="da-txt">' + where + ' raggiungi <b>' + kmTxt + '</b> di piste protette senza mai finire nel traffico: ' +
+      '<b>' + shTxt + '</b> di quelle di ' + c.k + '. Per percorrerle tutte bastano circa ' + tempo + ' di pedalata.</div>' +
+      '<div class="da-sub">La pista protetta più vicina è a ' + (n.d < 15 ? "pochi metri" : f0(Math.round(n.d / 10) * 10) + " metri") +
+      (cid === 0 ? ". Fa parte della rete continua più grande della città." : ". È uno dei " + f0(c.comps.length) + " pezzi di rete staccati tra loro: prova a cliccare in un altro punto.") + "</div>");
+    R.scheduleHeight();
+  }
+
+  function show(i) {
+    if (i === cur) return;
+    cur = i; sel = null; tabs();
+    var c = CITIES[cur];
+    map.getSource("rete").setData(c.fc);
+    map.fitBounds(c.bounds, { padding: 24, duration: R.reduced ? 0 : 900 });
+    pick(c.start, c.startName);
+  }
+})();
+</script>
+</body>
+</html>

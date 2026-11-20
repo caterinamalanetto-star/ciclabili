@@ -3,7 +3,7 @@
 | Dataviz | URL | Fonte |
 |---|---|---|
 | Le reti ciclabili di Torino, Milano e Bologna | https://caterinamalanetto-star.github.io/ciclabili/reti-citta/ | OpenStreetMap; Istat-ACI tav. 3.4 e 4.6 |
-| Dove arrivi in bici da qui? | https://caterinamalanetto-star.github.io/ciclabili/dove-arrivi/ | OpenStreetMap |
+| Da qui a lì in bici: quanta strada fai protetto? | https://caterinamalanetto-star.github.io/ciclabili/dove-arrivi/ | OpenStreetMap |
 | Quante piste ciclabili ha la tua città? | https://caterinamalanetto-star.github.io/ciclabili/la-tua-citta/ | Istat, Ambiente urbano 2024, tav. 17.1, 20.1, 20.2, 21.2 |
 | La ciclabile di vernice di corso Regina Margherita | https://caterinamalanetto-star.github.io/ciclabili/corso-regina/ | Istat; OpenStreetMap; Biciplan Torino 2013; Il Post |
 | A 30 o a 50 all'ora | https://caterinamalanetto-star.github.io/ciclabili/velocita/ | Formule della dinamica del veicolo |
@@ -33,10 +33,10 @@ Estrazione Overpass del 20/11/2026. Separati dalle auto: `highway=cycleway` (inc
 </script>
 ```
 
-### Dove arrivi in bici da qui?
+### Da qui a lì in bici: quanta strada fai protetto?
 
 ```html
-<iframe src="https://caterinamalanetto-star.github.io/ciclabili/dove-arrivi/" width="100%" height="1000" frameborder="0" scrolling="no" title="Dove arrivi in bici da qui?"></iframe>
+<iframe src="https://caterinamalanetto-star.github.io/ciclabili/dove-arrivi/" width="100%" height="1000" frameborder="0" scrolling="no" title="Da qui a lì in bici: quanta strada fai protetto?"></iframe>
 <script>
 (function(){if(window.__radarQNv2)return;window.__radarQNv2=1;var O="https://caterinamalanetto-star.github.io";var MQ=window.matchMedia("(prefers-color-scheme:dark)");function frames(){return Array.prototype.filter.call(document.getElementsByTagName("iframe"),function(f){return(f.getAttribute("src")||"").indexOf(O+"/")===0;});}function theme(){var t=document.documentElement.getAttribute("data-theme");return t==="dark"||t==="light"?t:(MQ.matches?"dark":"light");}function bgOf(el){for(;el&&el.nodeType===1;el=el.parentElement){var c=getComputedStyle(el).backgroundColor;if(c&&c !=="transparent"&&!/rgba\([^)]*,\s*0\)$/.test(c))return c;}return null;}function send(f){try{f.contentWindow.postMessage({sentinel:"radar-qn",type:"theme",theme:theme(),bg:bgOf(f.parentElement)},O);}catch(e){}}function sendAll(){frames().forEach(send);}window.addEventListener("message",function(e){if(e.origin !==O)return;var d=e.data;if(!d||d.sentinel !=="radar-qn"||d.type !=="height")return;frames().forEach(function(f){if(f.contentWindow !==e.source)return;var h=Math.ceil(+d.height);if(h > 0&&20000 > h)f.style.height=h+"px";send(f);});});new MutationObserver(function(){sendAll();setTimeout(sendAll,400);}).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});if(MQ.addEventListener)MQ.addEventListener("change",sendAll);})();
 </script>
