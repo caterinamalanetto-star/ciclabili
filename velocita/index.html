@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A 30 o a 50 all'ora – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+<style>
+  .ve-ctrl { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 22px; }
+  @media (max-width: 519px) { .ve-ctrl { grid-template-columns: 1fr; } }
+  .ve-ctrl label { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-2); margin-bottom: 6px; }
+  .ve-ctrl label b { color: var(--ink); font-size: 16px; font-variant-numeric: tabular-nums; }
+  .ve-ctrl input[type=range] { width: 100%; accent-color: var(--blue); }
+  .ve-presets { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .ve-presets button { font: 600 13px/1 var(--sans); color: var(--ink); background: var(--bg); cursor: pointer; border: 1px solid var(--rule); border-radius: 999px; padding: 7px 12px; }
+  .ve-presets button[aria-pressed="true"] { color: var(--bg); background: var(--ink); border-color: var(--ink); }
+  .ve-res { margin-top: 18px; display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; align-items: end; min-height: 70px; }
+  .ve-big { font-size: 44px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .ve-big.is-red { color: var(--red); } .ve-big.is-ok { color: var(--blue); }
+  .ve-big small { font-size: 18px; font-weight: 600; }
+  .ve-res p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--ink-2); }
+  .ve-res p b { color: var(--ink); }
+  @media (max-width: 519px) { .ve-res { grid-template-columns: 1fr; } }
+  .ve-note { font-size: 12px; line-height: 1.45; color: var(--ink-2); margin: 14px 0 0; }
+</style>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">A 30 o a 50 all'ora: quando una bici sbuca davanti</h1>
+    <p class="r-sub">Sposta i cursori: quanta strada serve a un'auto per fermarsi, e a che velocità colpisce chi pedala se non ci riesce</p>
+  </header>
+
+  <div class="ve-ctrl">
+    <div>
+      <label for="v">Velocità dell'auto <b id="vlab"></b></label>
+      <input type="range" id="v" min="10" max="70" step="5" value="50">
+      <div class="ve-presets" id="presets"></div>
+    </div>
+    <div>
+      <label for="d">La bici compare a <b id="dlab"></b></label>
+      <input type="range" id="d" min="5" max="40" step="1" value="20">
+    </div>
+  </div>
+
+  <div class="ve-res" id="res" aria-live="polite"></div>
+  <figure class="r-chart" id="road"></figure>
+  <figure class="r-chart" id="curve">
+    <p class="r-chart__head">Lo spazio per fermarsi cresce più in fretta della velocità</p>
+    <p class="r-chart__sub">Metri necessari per fermarsi, a seconda della velocità</p>
+  </figure>
+
+  <p class="ve-note">Calcolo fisico con due ipotesi standard: un secondo per reagire, prima di cominciare a frenare, e una decelerazione di 7 metri al secondo quadrato, una frenata d'emergenza su asfalto asciutto. Con strada bagnata, distrazione o freni usurati gli spazi si allungano. La velocità d'urto è quella dell'auto nel momento in cui raggiunge la bici.</p>
+
+  <footer class="r-foot">
+    <span>Fonte: elaborazione su formule della dinamica del veicolo</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt, f0 = function (v) { return fmt(v, 0); }, f1 = function (v) { return fmt(v, 1); };
+  var TR = 1, DEC = 7; // secondi di reazione, m/s² di decelerazione
+  var vIn = document.getElementById("v"), dIn = document.getElementById("d");
+  function calc(kmh, D) {
+    var v = kmh / 3.6, react = v * TR, brake = v * v / (2 * DEC), stop = react + brake, hit = 0;
+    if (D <= react) hit = kmh; // non ha ancora iniziato a frenare
+    else if (D < stop) hit = Math.sqrt(v * v - 2 * DEC * (D - react)) * 3.6;
+    return { react: react, brake: brake, stop: stop, hit: hit };
+  }
+  d3.select("#presets").selectAll("button").data([30, 50]).join("button").text(function (d) { return d + " km/h"; })
+    .on("click", function (ev, d) { vIn.value = d; update(); });
+
+  var road = document.getElementById("road"), curve = document.getElementById("curve");
+  function update() { drawRes(); drawRoad("static"); drawCurve("static"); R.scheduleHeight(); }
+  vIn.addEventListener("input", update); dIn.addEventListener("input", update);
+
+  function drawRes() {
+    var kmh = +vIn.value, D = +dIn.value, c = calc(kmh, D);
+    d3.select("#vlab").text(kmh + " km/h"); d3.select("#dlab").text(D + " metri");
+    d3.selectAll("#presets button").attr("aria-pressed", function (d) { return d === kmh; });
+    var html;
+    if (c.hit > 0) {
+      html = '<div class="ve-big is-red">' + f0(c.hit) + ' <small>km/h</small></div><p>Servono <b>' + f0(c.stop) + ' metri</b> per fermarsi, ' +
+        (D <= c.react ? 'ma la bici è così vicina che il guidatore <b>non fa in tempo nemmeno a premere il freno</b>: la colpisce a ' + f0(c.hit) + ' km/h.'
+          : 'ma la bici è a ' + D + ' metri: l\'auto <b>la colpisce ancora a ' + f0(c.hit) + ' km/h</b>.') + '</p>';
+    } else {
+      html = '<div class="ve-big is-ok">' + f0(c.stop) + ' <small>metri</small></div><p>Sono quelli che servono per fermarsi: <b>l\'auto si ferma ' +
+        f0(D - c.stop) + (Math.round(D - c.stop) === 1 ? ' metro' : ' metri') + ' prima della bici</b>. ' + f0(c.react) + ' metri se ne vanno solo nel tempo di reazione.</p>';
+    }
+    d3.select("#res").html(html);
+  }
+
+  function drawRoad(phase) {
+    var W = road.getBoundingClientRect().width; if (!W) return;
+    var kmh = +vIn.value, D = +dIn.value, c = calc(kmh, D);
+    var narrow = R.isNarrow(W), H = 136, m = { l: 34, r: 16 };
+    var x = d3.scaleLinear().domain([0, 70]).range([m.l, W - m.r]);
+    d3.select(road).select("svg").remove();
+    var svg = d3.select(road).append("svg").attr("width", W).attr("height", H).attr("role", "img")
+      .attr("aria-label", "Schema: a " + kmh + " km/h l'auto percorre " + f0(c.react) + " metri prima di frenare e " + f0(c.brake) + " metri in frenata; la bici è a " + D + " metri.");
+    var yR = 46;
+    svg.append("rect").attr("x", 0).attr("y", yR - 22).attr("width", W).attr("height", 44).style("fill", "var(--grey-5)").style("opacity", 0.6);
+    svg.append("line").attr("x1", 0).attr("x2", W).attr("y1", yR).attr("y2", yR).style("stroke", "var(--bg)").style("stroke-width", 2).style("stroke-dasharray", "10 8");
+    // segmenti: reazione e frenata
+    var end = Math.min(c.stop, 70);
+    svg.append("rect").attr("x", x(0)).attr("y", yR + 6).attr("height", 8).attr("rx", 2).attr("width", Math.max(0, x(Math.min(c.react, 70)) - x(0)))
+      .style("fill", "var(--grey-2)");
+    svg.append("rect").attr("x", x(Math.min(c.react, 70))).attr("y", yR + 6).attr("height", 8).attr("rx", 2)
+      .attr("width", Math.max(0, x(end) - x(Math.min(c.react, 70)))).style("fill", c.hit > 0 ? "var(--red)" : "var(--blue)");
+    // auto
+    svg.append("rect").attr("x", x(0) - 30).attr("y", yR - 17).attr("width", 28).attr("height", 14).attr("rx", 3).style("fill", "var(--ink)");
+    // bici
+    var bx = x(D);
+    svg.append("line").attr("x1", bx).attr("x2", bx).attr("y1", yR - 26).attr("y2", yR + 22).style("stroke", "var(--ink)").style("stroke-dasharray", "2 2");
+    var bk = svg.append("g").attr("transform", "translate(" + (bx - 8) + "," + (yR - 20) + ")").style("fill", "none").style("stroke", "var(--ink)").style("stroke-width", 1.4).style("stroke-linecap", "round");
+    bk.append("circle").attr("cx", 3).attr("cy", 8).attr("r", 3.4); bk.append("circle").attr("cx", 14).attr("cy", 8).attr("r", 3.4);
+    bk.append("path").attr("d", "M3 8 L6.5 2.5 L12 2.5 L14 8 M6.5 2.5 L8.6 8 L12 2.5");
+    svg.append("text").attr("class", "tick-label").attr("x", bx).attr("y", yR - 28).attr("text-anchor", bx > W - 60 ? "end" : "middle").style("fill", "var(--ink)").text("bici a " + D + " m");
+    // etichette segmenti
+    var lab = svg.append("g").attr("class", "tick-label");
+    lab.append("text").attr("x", x(0)).attr("y", yR + 36).text("reazione " + f0(c.react) + " m");
+    lab.append("text").attr("x", Math.min(x(end), W - m.r)).attr("y", yR + 52).attr("text-anchor", "end")
+      .text((narrow ? "" : "frenata " + f0(c.brake) + " m · ") + "si ferma in " + f0(c.stop) + " m");
+    // asse
+    var ax = svg.append("g").attr("class", "tick-label");
+    [0, 10, 20, 30, 40, 50, 60, 70].filter(function (t) { return !narrow || t % 20 === 0; }).forEach(function (t) {
+      ax.append("text").attr("x", x(t)).attr("y", H - 4).attr("text-anchor", "middle").style("opacity", 0.8).text(t + " m");
+    });
+  }
+
+  function drawCurve(phase) {
+    var W = curve.getBoundingClientRect().width; if (!W) return;
+    var kmh = +vIn.value, narrow = R.isNarrow(W), m = { t: 20, r: 70, b: 28, l: 34 }, H = narrow ? 220 : 240;
+    var w = W - m.l - m.r, h = H - m.t - m.b;
+    var pts = d3.range(10, 71, 1).map(function (v) { return { v: v, s: calc(v, 999).stop }; });
+    var x = d3.scaleLinear().domain([10, 70]).range([0, w]), y = d3.scaleLinear().domain([0, 70]).range([h, 0]);
+    d3.select(curve).select("svg").remove();
+    var svg = d3.select(curve).append("svg").attr("width", W).attr("height", H).attr("role", "img")
+      .attr("aria-label", "Grafico: lo spazio di arresto è di " + f0(calc(30, 999).stop) + " metri a 30 km/h e di " + f0(calc(50, 999).stop) + " metri a 50 km/h.");
+    var g = svg.append("g").attr("transform", "translate(" + m.l + "," + m.t + ")");
+    g.append("g").attr("class", "grid").selectAll("line").data([0, 20, 40, 60]).join("line")
+      .attr("x1", -m.l).attr("x2", w).attr("y1", function (d) { return Math.round(y(d)) + 0.5; }).attr("y2", function (d) { return Math.round(y(d)) + 0.5; })
+      .attr("class", function (d) { return d === 0 ? "baseline" : null; });
+    g.append("g").selectAll("text").data([20, 40, 60]).join("text").attr("class", "tick-label").attr("x", -m.l).attr("y", function (d) { return y(d) - 5; }).text(function (d) { return d + " m"; });
+    g.append("g").selectAll("text").data([10, 30, 50, 70]).join("text").attr("class", "tick-label").attr("text-anchor", "middle")
+      .attr("x", function (d) { return x(d); }).attr("y", h + 18).text(function (d) { return d + " km/h"; });
+    g.append("path").datum(pts).attr("d", d3.line().curve(d3.curveMonotoneX).x(function (p) { return x(p.v); }).y(function (p) { return y(p.s); }))
+      .style("fill", "none").style("stroke", "var(--blue)").style("stroke-width", 2.5);
+    [30, 50].forEach(function (v) {
+      var s = calc(v, 999).stop;
+      g.append("circle").attr("cx", x(v)).attr("cy", y(s)).attr("r", 4).style("fill", "var(--ink)");
+      g.append("text").attr("class", "val-label").attr("x", x(v) - 8).attr("y", y(s) - 8).attr("text-anchor", "end").text(v + " km/h: " + f0(s) + " m");
+    });
+    var s = calc(kmh, 999).stop;
+    g.append("line").attr("x1", x(kmh)).attr("x2", x(kmh)).attr("y1", y(s)).attr("y2", h).style("stroke", "var(--red)").style("stroke-dasharray", "3 3");
+    g.append("circle").attr("cx", x(kmh)).attr("cy", y(s)).attr("r", 5.5).style("fill", "var(--red)");
+    if (kmh !== 30 && kmh !== 50) g.append("text").attr("class", "val-label").attr("x", x(kmh) + 9).attr("y", y(s) + 14).style("fill", "var(--red)").text(kmh + " km/h: " + f0(s) + " m");
+  }
+
+  R.responsive(road, function () { drawRoad("static"); });
+  R.responsive(curve, function () { drawCurve("static"); });
+  drawRes();
+})();
+</script>
+</body>
+</html>

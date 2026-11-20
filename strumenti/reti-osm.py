@@ -44,6 +44,8 @@ for name,fn,hl in cities:
     comp=collections.Counter()
     for i,f in enumerate(P): comp[find(i)]+=f['l']
     big=max(comp,key=comp.get)
+    rank={r:i for i,(r,_) in enumerate(sorted(comp.items(),key=lambda x:-x[1]))}
+    json.dump([round(v) for _,v in sorted(comp.items(),key=lambda x:-x[1])],open(f'ciclabili/data/componenti-{name.lower()}.json','w'))
     # grafo della componente principale per il percorso della bici
     G=collections.defaultdict(dict)
     for i,f in enumerate(P):
@@ -68,7 +70,7 @@ for name,fn,hl in cities:
     out=[]
     for i,f in enumerate(P):
         p=f['p']; t='principale' if find(i)==big else 'protetta'
-        props={"t":t,"d":f['d'],"m":round(f['l'])}
+        props={"t":t,"d":f['d'],"m":round(f['l']),"c":rank[find(i)]}
         if p.get('name'): props['n']=p['name']
         if p.get('surface') in SURF: props['s']=SURF[p['surface']]
         if p.get('lit') in ('yes','no'): props['i']='sì' if p['lit']=='yes' else 'no'

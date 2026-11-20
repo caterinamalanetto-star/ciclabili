@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corso Regina Margherita, la ciclabile di vernice – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+<style>
+  .cr-stage { position: relative; margin-top: 18px; }
+  .cr-stage svg { display: block; width: 100%; height: auto; }
+  .cr-text { margin-top: 12px; min-height: 120px; }
+  .cr-step { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); }
+  .cr-text h2 { font-family: var(--serif); font-size: 24px; line-height: 1.15; margin: 4px 0 6px; color: var(--title); }
+  .cr-text p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--ink); }
+  .cr-text p q { font-style: italic; }
+  .cr-ctrl { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  .cr-btn { font: 600 14px/1 var(--sans); color: var(--ink); background: var(--bg); cursor: pointer;
+    border: 1px solid var(--rule); border-radius: 999px; padding: 10px 16px; }
+  .cr-btn.is-main { color: var(--bg); background: var(--ink); border-color: var(--ink); }
+  .cr-btn:disabled { opacity: .35; cursor: default; }
+  .cr-btn:focus-visible, .cr-dot:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .cr-dots { display: flex; gap: 6px; margin-left: auto; }
+  .cr-dot { width: 10px; height: 10px; border-radius: 50%; border: 0; padding: 0; background: var(--grey-5); cursor: pointer; }
+  .cr-dot[aria-current="step"] { background: var(--ink); }
+  .rc-key { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 13px; color: var(--ink-2); }
+  .rc-key i { display: inline-block; width: 16px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: 3px; }
+</style>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">La ciclabile di vernice di corso Regina Margherita</h1>
+    <p class="r-sub">Torino ha la rete ciclabile più fitta d'Italia tra le grandi città. Ma nella strada dove è morto Nicolò, la pista è una striscia sull'asfalto. La storia in sei passaggi</p>
+  </header>
+
+  <div class="cr-stage" id="stage"></div>
+  <div class="rc-key">
+    <span><i style="background:var(--blue-2)"></i>Piste separate dalle auto</span>
+    <span><i style="background:var(--red)"></i>Corsie solo dipinte</span>
+  </div>
+
+  <div class="cr-text" id="text" aria-live="polite"></div>
+  <div class="cr-ctrl">
+    <button class="cr-btn" id="prev">← Indietro</button>
+    <button class="cr-btn is-main" id="next">Avanti →</button>
+    <div class="cr-dots" id="dots" aria-label="Passaggi"></div>
+  </div>
+
+  <footer class="r-foot">
+    <span>Fonte: Istat, Ambiente urbano 2024; elaborazione su dati © OpenStreetMap contributors (ODbL), 20 novembre 2026; Comune di Torino, Biciplan 2013; Il Post</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar;
+  var STEPS = [
+    { view: "all", mode: "all", t: "La rete più fitta",
+      p: "Tra i 14 capoluoghi delle città metropolitane, Torino è quello con più piste ciclabili rispetto al territorio: 200,8 km ogni 100 km², per un totale di 261 km. Fanno meglio solo due capoluoghi più piccoli, Bergamo e Padova." },
+    { view: "all", mode: "type", t: "Quasi tutta separata dalle auto",
+      p: "Sulle mappe di OpenStreetMap, il 92% della rete torinese è fatto di piste separate dal traffico, compresi i percorsi condivisi con i pedoni. Le corsie solo dipinte sulla carreggiata, in rosso, sono 19 km." },
+    { view: "rm", mode: "rm", t: "Il caso di corso Regina Margherita",
+      p: "Più di un quarto di quelle corsie dipinte è qui: 5,1 km, contando i due controviali. È la strada di Torino con più corsie ciclabili segnate solo dalla vernice." },
+    { view: "rm", mode: "rm", t: "Una soluzione «leggera», dal 2013",
+      p: "Il Biciplan del 2013 inseriva corso Regina Margherita tra le direttrici principali della rete. Per i controviali proponeva il limite dei 30 all'ora e una possibile corsia ciclabile: interventi veloci ed economici, in attesa di un <q>possibile consolidamento infrastrutturale in tempi successivi</q>." },
+    { view: "rm", mode: "rm", t: "22 settembre 2026",
+      p: "Nicolò Di Ciò, sette anni, è stato investito da un'auto mentre andava a scuola in bicicletta con il padre, nel controviale di corso Regina Margherita, quartiere Vanchiglia. È morto poche ore dopo. In quel tratto, riporta Il Post, il limite è di 30 all'ora ma nessun autovelox lo controlla. Sulla dinamica indaga la polizia." },
+    { view: "all", mode: "type", t: "La ciclabile umana",
+      p: "Da allora, gruppi di cittadini si mettono in fila lungo la linea tratteggiata per fare da cordolo con il corpo e con le biciclette. Chiedono che quella striscia di vernice diventi una pista vera." }
+  ];
+  var cur = 0, svg, gZ, lines, path, W, H, zoomAll, zoomRM;
+  d3.json("../data/rete-torino.geojson").then(function (g) {
+    var feats = g.features.filter(function (f) { return f.properties.t !== "percorso"; });
+    var fc = { type: "FeatureCollection", features: feats };
+    var hl = { type: "FeatureCollection", features: feats.filter(function (f) { return f.properties.hl; }) };
+    var host = document.getElementById("stage");
+
+    d3.select("#dots").selectAll("button").data(STEPS).join("button").attr("class", "cr-dot")
+      .attr("aria-label", function (s, i) { return "Passaggio " + (i + 1) + ": " + s.t; })
+      .on("click", function (ev, s) { go(STEPS.indexOf(s)); });
+    d3.select("#prev").on("click", function () { go(cur - 1); });
+    d3.select("#next").on("click", function () { go(cur + 1); });
+    document.addEventListener("keydown", function (e) { if (e.key === "ArrowRight") go(cur + 1); if (e.key === "ArrowLeft") go(cur - 1); });
+    var x0 = null;
+    host.addEventListener("touchstart", function (e) { x0 = e.touches[0].clientX; }, { passive: true });
+    host.addEventListener("touchend", function (e) { if (x0 == null) return; var dx = e.changedTouches[0].clientX - x0; x0 = null; if (Math.abs(dx) > 50) go(cur + (dx < 0 ? 1 : -1)); }, { passive: true });
+
+    R.responsive(host, function (w, phase) {
+      W = w; H = Math.round(W * (R.isNarrow(W) ? 1.0 : 0.62));
+      var proj = d3.geoMercator().fitExtent([[10, 10], [W - 10, H - 10]], fc);
+      path = d3.geoPath(proj);
+      d3.select(host).select("svg").remove();
+      svg = d3.select(host).append("svg").attr("viewBox", "0 0 " + W + " " + H).attr("role", "img")
+        .attr("aria-label", "Mappa della rete ciclabile di Torino con le corsie dipinte di corso Regina Margherita");
+      gZ = svg.append("g");
+      lines = gZ.append("g").selectAll("path").data(feats).join("path").attr("d", path)
+        .attr("vector-effect", "non-scaling-stroke").style("fill", "none").style("stroke-linecap", "round");
+      var b = path.bounds(hl), bw = b[1][0] - b[0][0], bh = b[1][1] - b[0][1];
+      var k = Math.min(8, 0.8 / Math.max(bw / W, bh / H));
+      zoomAll = d3.zoomIdentity;
+      zoomRM = d3.zoomIdentity.translate(W / 2 - k * (b[0][0] + bw / 2), H / 2 - k * (b[0][1] + bh / 2)).scale(k);
+      gZ.append("g").attr("class", "anno").attr("id", "rmlab");
+      render(false);
+    });
+    go(0);
+  }).catch(function (e) { R.fail("#stage", e); });
+
+  function render(animate) {
+    var s = STEPS[cur];
+    var col = function (f) {
+      var t = f.properties.t, isLane = t === "corsia";
+      if (s.mode === "all") return "var(--blue-2)";
+      if (s.mode === "type") return isLane ? "var(--red)" : "var(--blue-2)";
+      return f.properties.hl ? "var(--red)" : (isLane ? "var(--red-4)" : "var(--grey-4)");
+    };
+    var wid = function (f) { return s.mode === "rm" && f.properties.hl ? 4 : (f.properties.t === "corsia" && s.mode !== "all" ? 2 : 1.3); };
+    var t = animate && !R.reduced ? d3.transition().duration(900).ease(d3.easeCubicInOut) : null;
+    (t ? lines.transition(t) : lines).style("stroke", col).style("stroke-width", wid);
+    var z = s.view === "rm" ? zoomRM : zoomAll;
+    (t ? gZ.transition(t) : gZ).attr("transform", z.toString());
+    var lab = gZ.select("#rmlab"); lab.selectAll("*").remove();
+    if (s.view === "rm") {
+      var hl = lines.filter(function (f) { return f.properties.hl; }).data();
+      var b = path.bounds({ type: "FeatureCollection", features: hl });
+      var k = zoomRM.k;
+      lab.append("text").attr("x", (b[0][0] + b[1][0]) / 2).attr("y", b[0][1] - 10 / k).attr("text-anchor", "middle")
+        .style("font-size", 13 / k + "px").style("stroke-width", 4 / k + "px").append("tspan").attr("class", "em").text("Corso Regina Margherita");
+      if (t) lab.style("opacity", 0).transition(t).style("opacity", 1);
+    }
+  }
+
+  function go(i) {
+    if (i < 0 || i >= STEPS.length) return;
+    var animate = i !== cur; cur = i;
+    var s = STEPS[cur];
+    d3.select("#text").html('<div class="cr-step">' + (cur + 1) + " di " + STEPS.length + "</div><h2>" + s.t + "</h2><p>" + s.p + "</p>");
+    d3.select("#prev").property("disabled", cur === 0);
+    d3.select("#next").property("disabled", cur === STEPS.length - 1).text(cur === STEPS.length - 1 ? "Fine" : "Avanti →");
+    d3.selectAll(".cr-dot").attr("aria-current", function (d, j) { return j === cur ? "step" : null; });
+    if (svg) render(animate);
+    R.scheduleHeight();
+  }
+})();
+</script>
+</body>
+</html>

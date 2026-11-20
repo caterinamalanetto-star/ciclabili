@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Le promesse dei Biciplan – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+<style>
+  .pr-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 22px; }
+  .pr-tab { font: 600 14px/1 var(--sans); color: var(--ink-2); background: var(--bg); cursor: pointer; border: 1px solid var(--rule); border-radius: 999px; padding: 8px 14px; }
+  .pr-tab[aria-selected="true"] { color: var(--bg); background: var(--ink); border-color: var(--ink); }
+  .pr-tab:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .pr-text { margin-top: 16px; font-size: 15px; line-height: 1.5; color: var(--ink); min-height: 48px; }
+  .pr-text b { font-weight: 700; }
+  .pr-key { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 8px; font-size: 13px; color: var(--ink-2); }
+  .pr-key i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+</style>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">Le promesse dei piani per la bici</h1>
+    <p class="r-sub">Quota degli spostamenti fatti in bicicletta: da dove partivano i Biciplan, dove volevano arrivare e dove sono oggi</p>
+  </header>
+
+  <div class="pr-tabs" role="tablist" id="tabs"></div>
+  <div class="pr-text" id="text" aria-live="polite"></div>
+  <figure class="r-chart" id="chart"></figure>
+  <div class="pr-key">
+    <span><i style="background:var(--grey-3)"></i>Quota quando è stato approvato il piano</span>
+    <span><i style="background:var(--bg);border:2px solid var(--blue)"></i>Obiettivo</span>
+    <span><i style="background:var(--red)"></i>Ultimo dato disponibile</span>
+  </div>
+
+  <footer class="r-foot">
+    <span>Fonte: Biciplan di Torino (2013) e Bologna (2017); Biciplan «Cambio» della Città metropolitana di Milano (2021); Agenzia della mobilità piemontese, IMQ 2022</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt, pct = function (v) { return fmt(v, v % 1 ? 1 : 0) + "%"; };
+  R.loadCSV("../data/promesse.csv").then(function (raw) {
+    var data = raw.map(function (r) {
+      return { k: r["Città"], piano: r["Piano"], anno: r["Anno piano"], da: R.num(r["Quota di partenza (%)"]), ob: R.num(r["Obiettivo (%)"]),
+        sc: r["Scadenza"], ora: R.num(r["Quota attuale (%)"]), annoOra: r["Anno dato attuale"], fonte: r["Fonte dato attuale"] };
+    });
+    var cur = 0, host = document.getElementById("chart");
+    d3.select("#tabs").selectAll("button").data(data).join("button").attr("class", "pr-tab").attr("role", "tab")
+      .text(function (d) { return d.k; }).on("click", function (ev, d) { cur = data.indexOf(d); text(); draw("play"); });
+
+    function text() {
+      var d = data[cur];
+      d3.selectAll(".pr-tab").attr("aria-selected", function (x) { return x === d; });
+      var s = "Il " + d.piano + (/^Città/.test(d.k) ? " della " : " di ") + d.k + ", approvato nel " + d.anno + ", partiva dal <b>" + pct(d.da) + "</b> di spostamenti in bici e puntava al <b>" + pct(d.ob) + "</b>" +
+        (d.sc ? " entro il " + d.sc : ", senza una data precisa") + ". ";
+      s += d.ora != null ? "Nel " + d.annoOra + " la quota era del <b>" + pct(d.ora) + "</b>: " + (Math.abs(d.ora - d.da) < 0.5 ? "praticamente ferma." : (d.ora > d.da ? "è cresciuta di " + fmt(d.ora - d.da, 1) + " punti." : "è scesa."))
+        : "Un dato aggiornato e confrontabile sull'intera città non è stato pubblicato.";
+      d3.select("#text").html(s);
+      R.scheduleHeight();
+    }
+
+    function draw(phase) {
+      var W = host.getBoundingClientRect().width; if (!W) return;
+      var d = data[cur], m = { t: 46, r: 24, b: 30, l: 16 }, H = 150, w = W - m.l - m.r, h = H - m.t - m.b;
+      var x = d3.scaleLinear().domain([0, 25]).range([0, w]), yy = h / 2;
+      d3.select(host).select("svg").remove();
+      var svg = d3.select(host).append("svg").attr("width", W).attr("height", H).attr("role", "img")
+        .attr("aria-label", d.k + ": quota di spostamenti in bici al " + pct(d.da) + " quando è stato approvato il piano, obiettivo " + pct(d.ob) + (d.ora != null ? ", ultimo dato " + pct(d.ora) + " nel " + d.annoOra : "") + ".");
+      var g = svg.append("g").attr("transform", "translate(" + m.l + "," + m.t + ")");
+      var ticks = [0, 5, 10, 15, 20, 25];
+      g.append("g").attr("class", "grid").selectAll("line").data(ticks).join("line")
+        .attr("x1", function (t) { return Math.round(x(t)) + 0.5; }).attr("x2", function (t) { return Math.round(x(t)) + 0.5; }).attr("y1", -10).attr("y2", h);
+      g.append("g").selectAll("text").data(ticks).join("text").attr("class", "tick-label").attr("text-anchor", "middle")
+        .attr("x", function (t) { return x(t); }).attr("y", h + 20).text(function (t) { return t + "%"; });
+      // distanza da colmare
+      var gap = g.append("line").attr("y1", yy).attr("y2", yy).style("stroke", "var(--blue)").style("stroke-width", 6).style("opacity", 0.18).style("stroke-linecap", "round");
+      R.enter(gap, phase, function (s) { s.attr("x1", x(d.da)).attr("x2", x(d.da)); }, function (s) { s.attr("x1", x(d.da)).attr("x2", x(d.ob)); });
+      g.append("circle").attr("cx", x(d.ob)).attr("cy", yy).attr("r", 9).style("fill", "var(--bg)").style("stroke", "var(--blue)").style("stroke-width", 2.5);
+      g.append("circle").attr("cx", x(d.da)).attr("cy", yy).attr("r", 7).style("fill", "var(--grey-3)");
+      var an = g.append("g").attr("class", "anno");
+      an.append("text").attr("x", x(d.ob)).attr("y", yy - 18).attr("text-anchor", "middle").append("tspan").attr("class", "em").text("Obiettivo " + pct(d.ob) + (d.sc ? " (" + d.sc + ")" : ""));
+      an.append("text").attr("x", x(d.da)).attr("y", yy - 18).attr("text-anchor", x(d.da) < 50 ? "start" : "middle").text(d.anno + ": " + pct(d.da));
+      if (d.ora != null) {
+        var now = g.append("circle").attr("cx", x(d.ora)).attr("cy", yy).attr("r", 6).style("fill", "var(--red)").style("stroke", "var(--bg)").style("stroke-width", 1.5);
+        R.enter(now, phase, function (s) { s.attr("r", 0); }, function (s) { s.attr("r", 6); }, 400);
+        an.append("text").attr("x", x(d.ora)).attr("y", yy + 26).attr("text-anchor", x(d.ora) < 50 ? "start" : "middle").style("fill", "var(--red)").text(d.annoOra + ": " + pct(d.ora));
+      } else {
+        an.append("text").attr("x", x((d.da + d.ob) / 2)).attr("y", yy + 26).attr("text-anchor", "middle").style("fill", "var(--ink-2)").text("Dato attuale non disponibile");
+      }
+    }
+    text();
+    R.responsive(host, function (w, phase) { draw(phase); });
+  }).catch(function (e) { R.fail("#chart", e); });
+})();
+</script>
+</body>
+</html>

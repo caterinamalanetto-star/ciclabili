@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quante piste ciclabili ha la tua città – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+<style>
+  .tc-search { margin-top: 22px; }
+  .tc-search label { display: block; font-size: 13px; color: var(--ink-2); margin-bottom: 6px; }
+  .tc-search input { width: 100%; max-width: 360px; font: 500 16px/1.2 var(--sans); color: var(--ink); background: var(--bg);
+    border: 1px solid var(--grey-4); border-radius: 6px; padding: 10px 12px; }
+  .tc-search input:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
+  .tc-msg { font-size: 13px; color: var(--red); margin-top: 6px; min-height: 18px; }
+  .tc-card { margin-top: 18px; }
+  .tc-name { font-family: var(--serif); font-weight: 700; font-size: 30px; line-height: 1.05; color: var(--title); margin: 0; }
+  .tc-area { font-size: 13px; color: var(--ink-2); margin-top: 4px; }
+  .tc-lead { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; align-items: end; margin-top: 14px; }
+  .tc-big { font-size: 48px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .tc-lead p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--ink-2); }
+  .tc-lead p b { color: var(--ink); }
+  @media (max-width: 519px) { .tc-lead { grid-template-columns: 1fr; } }
+  .tc-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-top: 18px; border-top: 1px solid var(--rule); padding-top: 14px; }
+  @media (max-width: 519px) { .tc-grid { grid-template-columns: 1fr 1fr; } }
+  .tc-grid b { display: block; font-size: 22px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .tc-grid span { font-size: 12px; line-height: 1.4; color: var(--ink-2); }
+  .tc-strip { margin-top: 26px; }
+</style>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">Quante piste ciclabili ha la tua città?</h1>
+    <p class="r-sub">I chilometri di piste nei comuni capoluogo, rispetto al territorio comunale. Cerca la tua città o clicca un punto del grafico</p>
+  </header>
+
+  <div class="tc-search">
+    <label for="q">Scrivi il nome di un capoluogo</label>
+    <input id="q" list="names" autocomplete="off" placeholder="Per esempio Bari, Padova, Roma…">
+    <datalist id="names"></datalist>
+    <div class="tc-msg" id="msg" aria-live="polite"></div>
+  </div>
+
+  <section class="tc-card" id="card" aria-live="polite"></section>
+
+  <figure class="r-chart tc-strip" id="strip">
+    <p class="r-chart__head">Tutti i capoluoghi a confronto</p>
+    <p class="r-chart__sub">Km di piste ogni 100 km² di superficie comunale, 2024. Ogni punto è una città</p>
+  </figure>
+
+  <footer class="r-foot">
+    <span>Fonte: Istat, Ambiente urbano 2024, tavole 17.1, 20.1, 20.2 e 21.2</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt, f0 = function (v) { return fmt(v, 0); }, f1 = function (v) { return fmt(v, 1); };
+  var esc = function (t) { return String(t).replace(/[&<>"]/g, function (ch) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]; }); };
+  var norm = function (s) { return String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z]/g, ""); };
+  var ALIAS = { "reggioemilia": "Reggio nell'Emilia", "reggiocalabria": "Reggio di Calabria", "bolzano": "Bolzano/Bozen", "bozen": "Bolzano/Bozen", "pesarourbino": "Pesaro", "forlicesena": "Forlì", "monzaebrianza": "Monza" };
+
+  Promise.all([R.loadCSV("../data/capoluoghi.csv"), R.loadCSV("../data/divario-territoriale.csv")]).then(function (res) {
+    var data = res[0].map(function (r) {
+      return { k: r["Comune"], area: r["Area"], d19: R.num(r["Densità 2019"]), d24: R.num(r["Densità 2024"]),
+        k19: R.num(r["Km 2019"]), k24: R.num(r["Km 2024"]), bs: R.num(r["Bike sharing 2024 (bici/10mila ab.)"]), z30: r["Zone 30 2024"] };
+    }).filter(function (d) { return d.d24 != null; });
+    var last = res[1][res[1].length - 1], areaAvg = { Nord: R.num(last["Nord"]), Centro: R.num(last["Centro"]), Mezzogiorno: R.num(last["Mezzogiorno"]) };
+    var ranked = data.slice().sort(function (a, b) { return b.d24 - a.d24; });
+    ranked.forEach(function (d, i) { d.rank = i + 1; });
+    var byKey = {}; data.forEach(function (d) { byKey[norm(d.k)] = d; });
+    Object.keys(ALIAS).forEach(function (a) { byKey[a] = byKey[norm(ALIAS[a])]; });
+
+    d3.select("#names").selectAll("option").data(data.slice().sort(function (a, b) { return a.k.localeCompare(b.k, "it"); }))
+      .join("option").attr("value", function (d) { return d.k; });
+
+    var cur = byKey[norm("Torino")];
+    var input = document.getElementById("q");
+    function find(v) {
+      var n = norm(v); if (!n) return null;
+      if (byKey[n]) return byKey[n];
+      var hits = data.filter(function (d) { return norm(d.k).indexOf(n) === 0; });
+      return hits.length === 1 ? hits[0] : null;
+    }
+    function tryPick() {
+      var d = find(input.value);
+      if (d) { d3.select("#msg").text(""); select(d); }
+      else if (norm(input.value).length > 2) d3.select("#msg").text("Non troviamo un capoluogo con questo nome. Prova a scrivere solo l'inizio.");
+    }
+    input.addEventListener("change", tryPick);
+    input.addEventListener("input", function () { var d = find(input.value); if (d && norm(d.k) === norm(input.value)) { d3.select("#msg").text(""); select(d); } });
+    input.addEventListener("keydown", function (e) { if (e.key === "Enter") tryPick(); });
+
+    function card(d) {
+      var avg = areaAvg[d.area], ratio = d.d24 / avg, ch = d.k19 ? (d.k24 / d.k19 - 1) * 100 : null;
+      var rest = " media dei capoluoghi del " + d.area;
+      var cmp = ratio >= 2 ? "<b>" + f1(ratio) + " volte</b> la" + rest
+        : ratio >= 1.15 ? "<b>il " + f0((ratio - 1) * 100) + "% in più della</b>" + rest
+        : ratio <= 0.5 ? "<b>meno della metà della</b>" + rest
+        : ratio <= 0.87 ? "<b>il " + f0((1 - ratio) * 100) + "% in meno della</b>" + rest
+        : "<b>in linea con la</b>" + rest;
+      var area = d.area === "Mezzogiorno" ? "Mezzogiorno" : d.area;
+      d3.select("#card").html(
+        '<h2 class="tc-name">' + esc(d.k) + '</h2><div class="tc-area">' + area + "</div>" +
+        '<div class="tc-lead"><div class="tc-big">' + f1(d.d24) + '</div><p>km di piste ogni 100 km² di territorio nel 2024: ' + cmp + " (" + f1(avg) + "). " +
+        "È <b>" + d.rank + "ª su " + data.length + "</b> tra i capoluoghi.</p></div>" +
+        '<div class="tc-grid">' +
+          "<div><b>" + (d.k24 >= 100 ? f0(d.k24) : f1(d.k24)) + " km</b><span>di piste in tutto nel 2024</span></div>" +
+          "<div><b>" + (ch == null ? "n.d." : Math.abs(ch) < 0.5 ? "invariata" : (ch >= 0 ? "+" : "−") + f0(Math.abs(ch)) + "%") + "</b><span>" + (ch == null ? "variazione dal 2019 non disponibile" : "rispetto al 2019 (" + (d.k19 >= 100 ? f0(d.k19) : f1(d.k19)) + " km)") + "</span></div>" +
+          "<div><b>" + (d.bs == null ? "n.d." : d.bs === 0 ? "nessuno" : f1(d.bs)) + "</b><span>" + (d.bs === 0 ? "servizio di bike sharing nel 2024" : "bici in sharing ogni 10mila abitanti") + "</span></div>" +
+          "<div><b>" + (d.z30 === "sì" ? "sì" : d.z30 === "no" ? "no" : "n.d.") + "</b><span>Zone 30 istituite nel 2024</span></div>" +
+        "</div>");
+    }
+
+    var host = document.getElementById("strip"), tip = R.tooltip(host), dots, labelG, x, yy;
+    R.dismissOutside(host, function () { tip.hide(); });
+    R.responsive(host, function (W, phase) {
+      var narrow = R.isNarrow(W), m = { top: 34, right: 12, bottom: 30, left: 12 }, H = narrow ? 170 : 150;
+      var w = W - m.left - m.right, h = H - m.top - m.bottom;
+      x = d3.scaleLinear().domain([0, d3.max(data, function (d) { return d.d24; })]).nice().range([0, w]);
+      // pallini disposti a sciame per non sovrapporsi
+      var r = narrow ? 4 : 4.5, sim = data.map(function (d) { return { d: d, x: x(d.d24), y: h / 2 }; });
+      var s = d3.forceSimulation(sim).force("x", d3.forceX(function (n) { return n.x; }).strength(1)).force("y", d3.forceY(h / 2).strength(0.06))
+        .force("c", d3.forceCollide(r + 0.8)).stop();
+      for (var i = 0; i < 160; i++) s.tick();
+      sim.forEach(function (n) { n.y = Math.max(r, Math.min(h - r, n.y)); n.d._x = n.x; n.d._y = n.y; });
+
+      d3.select(host).select("svg").remove();
+      var svg = d3.select(host).insert("svg", ".r-tip").attr("width", W).attr("height", H).attr("role", "img")
+        .attr("aria-label", "Grafico a punti: la densità delle piste ciclabili nei capoluoghi va da " + f1(ranked[ranked.length - 1].d24) + " km ogni 100 km² a " + esc(ranked[ranked.length - 1].k) + " a " + f1(ranked[0].d24) + " a " + esc(ranked[0].k) + ".");
+      svg.append("title").text("Densità delle piste ciclabili nei capoluoghi, 2024");
+      var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+      var ticks = x.ticks(narrow ? 4 : 6);
+      g.append("g").attr("class", "grid").selectAll("line").data(ticks).join("line")
+        .attr("x1", function (t) { return Math.round(x(t)) + 0.5; }).attr("x2", function (t) { return Math.round(x(t)) + 0.5; }).attr("y1", 0).attr("y2", h);
+      g.append("g").selectAll("text").data(ticks).join("text").attr("class", "tick-label").attr("text-anchor", "middle")
+        .attr("x", function (t) { return x(t); }).attr("y", h + 18).text(function (t) { return f0(t); });
+      dots = g.append("g").selectAll("circle").data(data).join("circle").attr("class", "mark").attr("r", r)
+        .attr("cx", function (d) { return d._x; }).attr("cy", function (d) { return d._y; }).style("cursor", "pointer");
+      R.enter(dots, phase, function (q) { q.attr("cx", 0).style("opacity", 0); }, function (q) { q.attr("cx", function (d) { return d._x; }).style("opacity", 1); });
+      labelG = g.append("g").attr("class", "anno");
+      dots.on("pointerenter", function (ev, d) {
+        tip.show(R.tipHTML({ title: esc(d.k), value: f1(d.d24), unit: "km ogni 100 km²", rows: [["Posizione", d.rank + "ª su " + data.length]], note: "Clicca per vedere la scheda" }), d._x + m.left, d._y + m.top);
+      }).on("pointerleave", function (ev) { if (ev.pointerType === "mouse") tip.hide(); })
+        .on("click", function (ev, d) { tip.hide(); input.value = d.k; d3.select("#msg").text(""); select(d); });
+      yy = m;
+      paint();
+    });
+
+    function paint() {
+      if (!dots) return;
+      dots.style("fill", function (d) { return d === cur ? "var(--red)" : "var(--grey-4)"; })
+        .attr("r", function (d) { return d === cur ? 6.5 : +d3.select(this).attr("r") > 5 ? 4.5 : d3.select(this).attr("r"); });
+      dots.filter(function (d) { return d === cur; }).raise();
+      labelG.selectAll("*").remove();
+      var t = labelG.append("text").attr("x", cur._x).attr("y", -12).attr("text-anchor", cur._x > x.range()[1] * 0.75 ? "end" : cur._x < x.range()[1] * 0.25 ? "start" : "middle");
+      t.append("tspan").attr("class", "em").text(cur.k + " ");
+      t.append("tspan").text(f1(cur.d24));
+      labelG.append("path").attr("d", "M" + cur._x + ",-8V" + (cur._y - 7));
+    }
+    function select(d) { cur = d; card(d); paint(); R.scheduleHeight(); }
+    select(cur);
+  }).catch(function (e) { R.fail("#card", e); });
+})();
+</script>
+</body>
+</html>
