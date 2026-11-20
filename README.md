@@ -4,6 +4,7 @@
 |---|---|---|
 | Densità delle piste ciclabili nelle grandi città | https://caterinamalanetto-star.github.io/ciclabili/piste-citta/ | Istat, Ambiente urbano 2024, tav. 20.1-20.2 |
 | Piste ciclabili, il divario tra Nord, Centro e Mezzogiorno | https://caterinamalanetto-star.github.io/ciclabili/divario-territoriale/ | Istat, Ambiente urbano 2024, tav. 20.1 |
+| Le reti ciclabili di Torino e Milano (mappe) | https://caterinamalanetto-star.github.io/ciclabili/reti-citta/ | Elaborazione su dati OpenStreetMap, 20/11/2026 |
 | Torino, Milano e Bologna: piste, incidenti e morti | https://caterinamalanetto-star.github.io/ciclabili/tre-citta/ | Istat, Ambiente urbano 2024; Istat-ACI, Incidenti stradali 2025, tav. 3.4 e 4.6 |
 | Morti in bicicletta in Italia, 2010-2025 | https://caterinamalanetto-star.github.io/ciclabili/morti-bici/ | Istat-ACI, Incidenti stradali 2025, tav. 4.9 |
 | Variazione dei morti per tipo di utente, 2024-2025 | https://caterinamalanetto-star.github.io/ciclabili/variazione-vittime/ | Istat-ACI, Incidenti stradali 2025, tav. 4.9 |
@@ -77,3 +78,7 @@ Dati in `data/` (CSV con `;` e virgola decimale). Morti in bicicletta = bici tra
 </script>
 ```
 
+
+### Metodo delle mappe (`reti-citta`)
+
+Estrazione Overpass del 20/11/2026. Separati dalle auto: `highway=cycleway` (inclusi gli attraversamenti ciclabili) o `cycleway*=track`. Corsie dipinte: `cycleway*=lane`. Esclusi `shared_lane` (solo segnaletica). Lunghezze sulle linee della strada. Tratti collegati se distano al massimo 15 m. Script: `strumenti/reti-osm.py`.

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Le reti ciclabili di Torino e Milano – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+<style>
+  .rc-grid { display: grid; grid-template-columns: repeat(var(--n, 2), minmax(0, 1fr)); gap: 28px; margin-top: 24px; }
+  @media (max-width: 519px) { .rc-grid { grid-template-columns: 1fr; gap: 34px; } }
+  .rc-city { margin: 0; }
+  .rc-name { font-family: var(--serif); font-weight: 700; font-size: 24px; line-height: 1.1; color: var(--title); margin: 0 0 8px; }
+  .rc-map svg { display: block; width: 100%; height: auto; }
+  .rc-stats { margin-top: 10px; font-size: 13px; line-height: 1.45; color: var(--ink-2); }
+  .rc-stats b { color: var(--ink); font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums; }
+  .rc-stats p { margin: 0 0 6px; }
+  .rc-key { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 18px; font-size: 13px; color: var(--ink-2); }
+  .rc-key i { display: inline-block; width: 16px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: 3px; }
+  .rc-note { font-size: 12px; color: var(--ink-2); margin: 10px 0 0; }
+</style>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title" id="title">Torino ha una rete, Milano tanti pezzi</h1>
+    <p class="r-sub">Piste ciclabili e corsie mappate su OpenStreetMap. In blu scuro la rete protetta più grande che si può percorrere senza interruzioni</p>
+  </header>
+
+  <div class="rc-key">
+    <span><i style="background:var(--blue-2)"></i>Rete protetta continua più grande</span>
+    <span><i style="background:var(--blue-4)"></i>Altri tratti separati dalle auto</span>
+    <span><i style="background:var(--red)"></i>Corsie solo dipinte</span>
+  </div>
+
+  <div class="rc-grid" id="rc"></div>
+  <p class="rc-note">Due tratti sono considerati collegati se distano al massimo 15 metri, circa la larghezza di un attraversamento. Le mappe non sono alla stessa scala. OpenStreetMap è mappato da volontari: i km mappati sono l'87-92% di quelli rilevati da Istat.</p>
+
+  <footer class="r-foot">
+    <span>Fonte: elaborazione su dati © OpenStreetMap contributors (ODbL), 20 novembre 2026</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt, f0 = function (v) { return fmt(v, 0); };
+  var COL = { principale: "var(--blue-2)", protetta: "var(--blue-4)", corsia: "var(--red)" };
+  var ORDER = { protetta: 0, principale: 1, corsia: 2 };
+
+  R.loadCSV("../data/reti-osm.csv").then(function (raw) {
+    var cities = raw.map(function (r) {
+      var P = R.num(r["Km separati dalle auto"]), C = R.num(r["Km corsie dipinte"]);
+      return { k: r["Città"], P: P, C: C, pezzi: R.num(r["Pezzi separati"]), big: R.num(r["Km rete continua più grande"]), corti: R.num(r["Pezzi sotto 500 m"]) };
+    });
+    document.getElementById("rc").style.setProperty("--n", cities.length);
+    return Promise.all(cities.map(function (c) { return d3.json("../data/rete-" + c.k.toLowerCase() + ".geojson"); }))
+      .then(function (geos) {
+        cities.forEach(function (c, i) {
+          c.geo = geos[i];
+          c.geo.features.sort(function (a, b) { return ORDER[a.properties.t] - ORDER[b.properties.t]; });
+        });
+        var grid = d3.select("#rc");
+        var cards = grid.selectAll("figure").data(cities).join("figure").attr("class", "rc-city");
+        cards.append("p").attr("class", "rc-name").text(function (c) { return c.k; });
+        cards.append("div").attr("class", "rc-map");
+        var st = cards.append("div").attr("class", "rc-stats");
+        st.append("p").html(function (c) { return "<b>" + fmt(c.big, 0) + " km</b> la rete protetta continua più grande, il " + fmt(c.big / c.P * 100, 0) + "% del totale"; });
+        st.append("p").html(function (c) { return "<b>" + f0(c.pezzi) + "</b> pezzi separati, " + f0(c.corti) + " più corti di 500 metri"; });
+        st.append("p").html(function (c) { return "<b>" + fmt(c.C / (c.P + c.C) * 100, 0) + "%</b> della rete è solo una corsia dipinta (" + fmt(c.C, 0) + " km)"; });
+
+        function draw(phase) {
+          cards.each(function (c) {
+            var box = d3.select(this).select(".rc-map");
+            box.selectAll("svg").remove();
+            var W = Math.max(200, Math.floor(this.getBoundingClientRect().width)), H = Math.round(W * 0.95);
+            var proj = d3.geoMercator().fitSize([W, H], c.geo), path = d3.geoPath(proj);
+            var svg = box.append("svg").attr("viewBox", "0 0 " + W + " " + H).attr("role", "img")
+              .attr("aria-label", "Mappa delle piste ciclabili di " + c.k + ": la rete protetta continua più grande misura " + fmt(c.big, 0) +
+                " km su " + fmt(c.P, 0) + " km di piste separate dalle auto, divise in " + f0(c.pezzi) + " pezzi; le corsie dipinte sono " + fmt(c.C, 0) + " km.");
+            svg.append("title").text("Rete ciclabile di " + c.k);
+            var lines = svg.append("g").selectAll("path").data(c.geo.features).join("path").attr("d", path)
+              .style("fill", "none").style("stroke", function (f) { return COL[f.properties.t]; })
+              .style("stroke-width", function (f) { return f.properties.t === "principale" ? 1.6 : (f.properties.t === "corsia" ? 1.8 : 1.2); })
+              .style("stroke-linecap", "round");
+            R.enter(lines, phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", 1); });
+            // annotazione corso Regina Margherita (solo dove presente)
+            var hl = c.geo.features.filter(function (f) { return f.properties.hl; });
+            if (hl.length) {
+              var b = path.bounds({ type: "FeatureCollection", features: hl });
+              var cx = (b[0][0] + b[1][0]) / 2, cy = b[0][1];
+              var an = svg.append("g").attr("class", "anno");
+              an.append("path").attr("d", "M" + cx + "," + (cy - 2) + "V" + Math.max(18, cy - 36));
+              an.append("circle").attr("cx", cx).attr("cy", cy - 2).attr("r", 1.75);
+              var t = an.append("text").attr("x", cx).attr("y", Math.max(12, cy - 42)).attr("text-anchor", "middle");
+              t.append("tspan").attr("class", "em").text("Corso Regina Margherita");
+              R.enter(an, phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", 1); }, R.DUR * 0.7);
+            }
+          });
+        }
+        R.responsive(document.getElementById("rc"), function (W, phase) { draw(phase); });
+      });
+  }).catch(function (e) { R.fail("#rc", e); });
+})();
+</script>
+</body>
+</html>
