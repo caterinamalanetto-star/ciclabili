@@ -7,42 +7,48 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <link rel="stylesheet" href="../assets/radar.css">
 <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="../assets/radar.js"></script>
 <style>
   .rc-nav { display: flex; align-items: center; gap: 8px; margin-top: 22px; }
   .rc-tabs { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
   .rc-tab, .rc-btn {
-    font: 600 14px/1 var(--sans); color: var(--ink-2); background: none; cursor: pointer;
+    font: 600 14px/1 var(--sans); color: var(--ink-2); background: var(--bg); cursor: pointer;
     border: 1px solid var(--rule); border-radius: 999px; padding: 8px 14px;
   }
   .rc-tab[aria-selected="true"] { color: var(--bg); background: var(--ink); border-color: var(--ink); }
   .rc-btn { padding: 8px 11px; min-width: 36px; }
   .rc-btn:disabled { opacity: .35; cursor: default; }
   .rc-tab:focus-visible, .rc-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-  @media (max-width: 519px) { .rc-count { display: none; } }
   .rc-count { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .rc-stage { position: relative; margin-top: 14px; touch-action: pan-y; }
-  .rc-stage svg { display: block; width: 100%; height: auto; cursor: grab; }
-  .rc-stage svg:active { cursor: grabbing; }
-  .rc-zoom { position: absolute; right: 0; top: 0; display: flex; flex-direction: column; gap: 4px; }
-  .rc-zoom .rc-btn, .rc-ride .rc-btn { background: var(--bg); }
-  .rc-ride { position: absolute; left: 0; top: 0; }
-  .rc-ride .rc-btn { font-weight: 500; font-size: 13px; }
+  @media (max-width: 519px) { .rc-count { display: none; } }
+  .rc-stage { position: relative; margin-top: 14px; }
+  #map { width: 100%; border-radius: 4px; overflow: hidden; background: var(--rule); }
+  .rc-ride { position: absolute; left: 10px; top: 10px; z-index: 2; }
+  .rc-ride .rc-btn { font-weight: 500; font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
   .rc-key { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 13px; color: var(--ink-2); }
   .rc-key i { display: inline-block; width: 16px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: 3px; }
   .rc-key .dot { width: 9px; height: 9px; border-radius: 50%; vertical-align: 0; }
   .rc-key .dash { height: 0; border-top: 1.5px dashed var(--ink); background: none; }
   .rc-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 18px; }
   .rc-stats .rc-stat:nth-child(n+4) { padding-top: 14px; border-top: 1px solid var(--rule); }
-  .rc-stats .rc-stat:nth-child(4) { grid-column: 1 / 2; }
   @media (max-width: 519px) { .rc-stats { grid-template-columns: 1fr; gap: 10px; } }
   .rc-stat b { display: block; font-size: 26px; font-weight: 700; letter-spacing: -0.02em; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.1; }
   .rc-stat span { font-size: 13px; line-height: 1.4; color: var(--ink-2); }
   .rc-stat.is-red b { color: var(--red); }
   .rc-note { font-size: 12px; line-height: 1.45; color: var(--ink-2); margin: 16px 0 0; }
   .rc-hint { font-size: 12px; color: var(--ink-2); margin: 8px 0 0; }
+  .rc-bike { width: 22px; height: 22px; border-radius: 50%; background: var(--bg); border: 1px solid var(--ink);
+    display: grid; place-items: center; box-shadow: 0 1px 3px rgba(0,0,0,.2); pointer-events: none; }
+  .rc-bike svg { width: 15px; height: 11px; overflow: visible; }
+  .rc-bike.is-left svg { transform: scaleX(-1); }
+  .rc-label { font: 600 12px/1.2 var(--sans); color: var(--ink); background: var(--bg); padding: 3px 6px; border-radius: 3px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.15); white-space: nowrap; pointer-events: none; transform: translateY(-14px); }
+  .maplibregl-ctrl-attrib { font-size: 10px; }
+  .r-tip { z-index: 3; }
 </style>
 </head>
 <body>
@@ -61,13 +67,9 @@
 
   <div class="rc-stage" id="stage">
     <div class="rc-ride"><button class="rc-btn" id="ride" aria-pressed="true">Ferma la bici</button></div>
-    <div class="rc-zoom">
-      <button class="rc-btn" id="zin" aria-label="Ingrandisci">+</button>
-      <button class="rc-btn" id="zout" aria-label="Riduci">−</button>
-      <button class="rc-btn" id="zreset" aria-label="Torna alla vista intera">⟲</button>
-    </div>
+    <div id="map" role="img" aria-label=""></div>
   </div>
-  <p class="rc-hint">Passa sopra un tratto (o toccalo) per vederne le caratteristiche. Trascina per spostarti, usa + e − per ingrandire.</p>
+  <p class="rc-hint">Passa sopra un tratto (o toccalo) per vederne le caratteristiche. Per ingrandire usa + e −, oppure Ctrl e la rotellina; sul telefono due dita.</p>
 
   <div class="rc-key" id="key">
     <span><i style="background:var(--blue-2)"></i>Rete protetta continua più grande</span>
@@ -78,10 +80,10 @@
 
   <div class="rc-stats" id="stats"></div>
 
-  <p class="rc-note">La bicicletta percorre avanti e indietro il viaggio più lungo che si può fare restando sempre su piste separate dalle auto. Due tratti sono considerati collegati se distano al massimo 15 metri, circa la larghezza di un attraversamento. Le mappe non sono alla stessa scala. OpenStreetMap è mappato da volontari: i km mappati vanno dall'87% al 105% di quelli rilevati da Istat. Istat non pubblica il numero di ciclisti morti per singolo comune: per questo riportiamo i morti in strada di tutte le categorie e le bici coinvolte in incidenti, che Istat conta insieme ai monopattini elettrici.</p>
+  <p class="rc-note">La bicicletta percorre avanti e indietro il viaggio più lungo che si può fare restando sempre su piste separate dalle auto. Due tratti sono considerati collegati se distano al massimo 15 metri, circa la larghezza di un attraversamento. OpenStreetMap è mappato da volontari: i km mappati vanno dall'87% al 105% di quelli rilevati da Istat. Istat non pubblica il numero di ciclisti morti per singolo comune: per questo riportiamo i morti in strada di tutte le categorie e le bici coinvolte in incidenti, che Istat conta insieme ai monopattini elettrici.</p>
 
   <footer class="r-foot">
-    <span>Fonte: elaborazione su dati © OpenStreetMap contributors (ODbL), dati al 19-20 novembre 2026; Istat-ACI, Incidenti stradali 2025 (tav. 3.4 e 4.6)</span>
+    <span>Fonte: elaborazione su dati © OpenStreetMap contributors (ODbL), dati al 19-20 novembre 2026; Istat-ACI, Incidenti stradali 2025 (tav. 3.4 e 4.6). Base cartografica OpenFreeMap / OpenMapTiles</span>
     <span>Elaborazione Radar – QN</span>
   </footer>
 </main>
@@ -89,15 +91,13 @@
 <script>
 (function () {
   var R = Radar, fmt = R.fmt, f0 = function (v) { return fmt(v, 0); }, f1 = function (v) { return fmt(v, 1); };
-  var COL = { principale: "var(--blue-2)", protetta: "var(--blue-4)", corsia: "var(--red)" };
-  var WID = { principale: 1.7, protetta: 1.2, corsia: 1.9 };
-  var ORDER = { protetta: 0, principale: 1, corsia: 2 };
-  var cities = [], cur = 0, riding = !R.reduced, inView = false, zoomK = 1;
-  var stageEl = document.getElementById("stage"), stage = d3.select(stageEl), tip = R.tooltip(stageEl);
-  var svg, gZoom, gBike, routePath, zoom, W = 0, H = 0, raf = null, clearHover = function () {};
-  var bikeT = 0, bikeDir = 1, last = null;
+  var STYLE = { light: "https://tiles.openfreemap.org/styles/positron", dark: "https://tiles.openfreemap.org/styles/dark" };
+  var root = document.documentElement, stageEl = document.getElementById("stage"), mapEl = document.getElementById("map");
+  var tip = R.tooltip(stageEl);
   var esc = function (t) { return String(t).replace(/[&<>"]/g, function (ch) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]; }); };
-  R.dismissOutside(stageEl, function () { tip.hide(); clearHover(); });
+  var css = function (v) { return getComputedStyle(root).getPropertyValue(v).trim(); };
+  var theme = function () { return root.getAttribute("data-theme") === "dark" ? "dark" : "light"; };
+  var cities = [], cur = 0, map, riding = !R.reduced, inView = false, hoverId = null, label = null;
 
   Promise.all([R.loadCSV("../data/reti-osm.csv"), R.loadCSV("../data/luoghi-morti.csv").catch(function () { return []; }), R.loadCSV("../data/tre-citta.csv")]).then(function (res) {
     var luoghi = res[1].filter(function (r) { return r["Latitudine"]; });
@@ -105,7 +105,11 @@
     cities = res[0].map(function (r) {
       return { k: r["Città"], P: R.num(r["Km separati dalle auto"]), C: R.num(r["Km corsie dipinte"]), pezzi: R.num(r["Pezzi separati"]),
         big: R.num(r["Km rete continua più grande"]), corti: R.num(r["Pezzi sotto 500 m"]), viaggio: R.num(r["Km viaggio più lungo su pista protetta"]),
-        luoghi: luoghi.filter(function (l) { return l["Città"] === r["Città"]; }), inc: inc[r["Città"]] };
+        inc: inc[r["Città"]], luoghi: {
+          type: "FeatureCollection",
+          features: luoghi.filter(function (l) { return l["Città"] === r["Città"]; }).map(function (l) {
+            return { type: "Feature", properties: { testo: l["Testo"], data: l["Data"], fonte: l["Fonte"] }, geometry: { type: "Point", coordinates: [R.num(l["Longitudine"]), R.num(l["Latitudine"])] } };
+          }) } };
     });
     if (luoghi.length) d3.select("#key").append("span").html('<i class="dot" style="background:var(--ink)"></i>Luoghi in cui è morto un ciclista');
     return Promise.all(cities.map(function (c) { return d3.json("../data/rete-" + c.k.toLowerCase() + ".geojson"); }));
@@ -113,12 +117,36 @@
     cities.forEach(function (c, i) {
       var g = geos[i];
       c.route = g.features.find(function (f) { return f.properties.t === "percorso"; });
-      c.lines = g.features.filter(function (f) { return f.properties.t !== "percorso"; })
-        .sort(function (a, b) { return ORDER[a.properties.t] - ORDER[b.properties.t]; });
-      c.fc = { type: "FeatureCollection", features: c.lines };
+      c.lines = { type: "FeatureCollection", features: g.features.filter(function (f) { return f.properties.t !== "percorso"; }) };
+      c.hl = { type: "FeatureCollection", features: c.lines.features.filter(function (f) { return f.properties.hl; }) };
+      c.bounds = bbox(c.lines);
+      prepRoute(c);
     });
     build();
   }).catch(function (e) { R.fail("#stage", e); });
+
+  function bbox(fc) {
+    var b = [180, 90, -180, -90];
+    fc.features.forEach(function (f) { f.geometry.coordinates.forEach(function (p) {
+      if (p[0] < b[0]) b[0] = p[0]; if (p[1] < b[1]) b[1] = p[1]; if (p[0] > b[2]) b[2] = p[0]; if (p[1] > b[3]) b[3] = p[1]; }); });
+    return [[b[0], b[1]], [b[2], b[3]]];
+  }
+  function dist(a, b) {
+    var R0 = 6371008.8, r = Math.PI / 180, dl = (b[0] - a[0]) * r, dp = (b[1] - a[1]) * r;
+    var h = Math.sin(dp / 2) * Math.sin(dp / 2) + Math.cos(a[1] * r) * Math.cos(b[1] * r) * Math.sin(dl / 2) * Math.sin(dl / 2);
+    return 2 * R0 * Math.asin(Math.sqrt(h));
+  }
+  function prepRoute(c) {
+    var pts = c.route.geometry.coordinates, cum = [0];
+    for (var i = 1; i < pts.length; i++) cum.push(cum[i - 1] + dist(pts[i - 1], pts[i]));
+    c.rPts = pts; c.rCum = cum; c.rLen = cum[cum.length - 1];
+  }
+  function pointAt(c, d) {
+    var cum = c.rCum, pts = c.rPts, lo = 0, hi = cum.length - 1;
+    while (hi - lo > 1) { var mid = (lo + hi) >> 1; if (cum[mid] <= d) lo = mid; else hi = mid; }
+    var seg = cum[hi] - cum[lo] || 1, t = (d - cum[lo]) / seg;
+    return [pts[lo][0] + (pts[hi][0] - pts[lo][0]) * t, pts[lo][1] + (pts[hi][1] - pts[lo][1]) * t];
+  }
 
   function build() {
     d3.select("#tabs").selectAll("button").data(cities).join("button")
@@ -126,134 +154,169 @@
       .on("click", function (ev, c) { show(cities.indexOf(c)); });
     d3.select("#prev").on("click", function () { show(cur - 1); });
     d3.select("#next").on("click", function () { show(cur + 1); });
-    d3.select("#ride").on("click", function () {
-      riding = !riding;
-      d3.select(this).attr("aria-pressed", riding).text(riding ? "Ferma la bici" : "Fai partire la bici");
-      if (riding) startBike(); else stopBike();
-    });
-    if (!riding) d3.select("#ride").attr("aria-pressed", false).text("Fai partire la bici");
-    d3.select("#zin").on("click", function () { svg.transition().duration(300).call(zoom.scaleBy, 1.6); });
-    d3.select("#zout").on("click", function () { svg.transition().duration(300).call(zoom.scaleBy, 1 / 1.6); });
-    d3.select("#zreset").on("click", function () { svg.transition().duration(300).call(zoom.transform, d3.zoomIdentity); });
     d3.select("#tabs").on("keydown", function (e) {
       if (e.key === "ArrowRight") { show(cur + 1); e.preventDefault(); }
       if (e.key === "ArrowLeft") { show(cur - 1); e.preventDefault(); }
     });
-    // scorrimento con il dito, solo a mappa non ingrandita
-    var x0 = null, y0 = null;
-    stageEl.addEventListener("touchstart", function (e) { if (e.touches.length === 1 && zoomK === 1) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; } else x0 = null; }, { passive: true });
-    stageEl.addEventListener("touchend", function (e) {
-      if (x0 == null) return;
-      var dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0; x0 = null;
-      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) show(cur + (dx < 0 ? 1 : -1));
-    }, { passive: true });
+    d3.select("#ride").on("click", function () {
+      riding = !riding; rideLabel();
+      if (riding) startBike(); else stopBike();
+    });
+    rideLabel();
+
+    sizeMap();
+    map = new maplibregl.Map({
+      container: "map", style: STYLE[theme()], bounds: cities[0].bounds, fitBoundsOptions: { padding: 30 },
+      attributionControl: false, cooperativeGestures: true, dragRotate: false, pitchWithRotate: false, touchPitch: false,
+      locale: {
+        "CooperativeGesturesHandler.WindowsHelpText": "Usa Ctrl + rotellina per ingrandire la mappa",
+        "CooperativeGesturesHandler.MacHelpText": "Usa ⌘ + rotellina per ingrandire la mappa",
+        "CooperativeGesturesHandler.MobileHelpText": "Usa due dita per spostare la mappa",
+        "NavigationControl.ZoomIn": "Ingrandisci", "NavigationControl.ZoomOut": "Riduci"
+      }
+    });
+    map.touchZoomRotate.disableRotation();
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: "Elaborazione Radar – QN" }), "bottom-right");
+    map.on("style.load", addLayers);
+    map.on("mousemove", "hit", hover);
+    map.on("click", "hit", hover);
+    map.on("mouseleave", "hit", unhover);
+    map.on("mousemove", "luoghi", hoverLuogo);
+    map.on("click", "luoghi", hoverLuogo);
+    map.on("mouseleave", "luoghi", function () { tip.hide(); map.getCanvas().style.cursor = ""; });
+    R.dismissOutside(stageEl, function () { tip.hide(); unhover(); });
+
+    map.__style = STYLE[theme()];
+    new MutationObserver(function () {
+      var want = STYLE[theme()];
+      if (map && map.__style !== want) { map.__style = want; map.setStyle(want, { diff: false }); }
+    }).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+
     new IntersectionObserver(function (en) { inView = en[0].isIntersecting; if (inView && riding) startBike(); else stopBike(); }, { threshold: 0.2 })
       .observe(stageEl);
-    R.responsive(stageEl, function (w, phase) { W = w; draw(phase); });
+    var lastW = stageEl.clientWidth;
+    window.addEventListener("resize", function () {
+      var w = stageEl.clientWidth;
+      if (w !== lastW) { lastW = w; sizeMap(); map.resize(); map.fitBounds(cities[cur].bounds, { padding: 30, duration: 0 }); }
+    });
+    update();
+  }
+
+  function sizeMap() {
+    var W = stageEl.clientWidth;
+    mapEl.style.height = Math.round(W * (R.isNarrow(W) ? 1.15 : 0.78)) + "px";
+    R.scheduleHeight();
+  }
+  function rideLabel() { d3.select("#ride").attr("aria-pressed", riding).text(riding ? "Ferma la bici" : "Fai partire la bici"); }
+
+  function addLayers() {
+    var c = cities[cur];
+    var col = { principale: css("--blue-2"), protetta: css("--blue-4"), corsia: css("--red"), ink: css("--ink"), bg: css("--bg") || "#ffffff" };
+    var width = function (w) { return ["interpolate", ["linear"], ["zoom"], 11, w, 14, w * 1.8, 17, w * 3.5]; };
+    map.addSource("rete", { type: "geojson", data: c.lines, generateId: true });
+    map.addSource("percorso", { type: "geojson", data: c.route });
+    map.addSource("luoghi", { type: "geojson", data: c.luoghi });
+    map.addLayer({ id: "halo", type: "line", source: "rete", layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": col.ink, "line-width": width(5), "line-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 0.85, 0] } });
+    [["protetta", 1.4], ["principale", 2], ["corsia", 2.2]].forEach(function (d) {
+      map.addLayer({ id: "rete-" + d[0], type: "line", source: "rete", filter: ["==", ["get", "t"], d[0]],
+        layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": col[d[0]], "line-width": width(d[1]) } });
+    });
+    map.addLayer({ id: "percorso", type: "line", source: "percorso",
+      paint: { "line-color": col.ink, "line-width": 1.2, "line-dasharray": [2, 2], "line-opacity": 0.8 } });
+    map.addLayer({ id: "hit", type: "line", source: "rete", paint: { "line-color": "#000000", "line-opacity": 0, "line-width": 12 } });
+    map.addLayer({ id: "luoghi", type: "circle", source: "luoghi",
+      paint: { "circle-radius": 5.5, "circle-color": col.ink, "circle-stroke-color": col.bg, "circle-stroke-width": 1.5 } });
+    hoverId = null;
+    placeMarkers();
+    if (riding && inView) startBike();
+  }
+
+  // bici ed etichetta come marker HTML
+  var bikeEl = document.createElement("div"), bikeMk = null, bikeD = 0, bikeDir = 1, raf = null, last = null;
+  bikeEl.className = "rc-bike";
+  bikeEl.innerHTML = '<svg viewBox="-0.5 -2 14 11" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink)">' +
+    '<circle cx="2.6" cy="5.4" r="2.6"/><circle cx="10.4" cy="5.4" r="2.6"/><path d="M2.6 5.4 L5.2 1.2 L9.2 1.2 L10.4 5.4 M5.2 1.2 L6.8 5.4 L9.2 1.2 M4.2 -0.2 L6.2 -0.2 M8.6 -1 L10 -1"/></g></svg>';
+  function placeMarkers() {
+    var c = cities[cur];
+    if (!bikeMk) bikeMk = new maplibregl.Marker({ element: bikeEl }).setLngLat(c.rPts[0]).addTo(map);
+    moveBike();
+    if (label) { label.remove(); label = null; }
+    if (c.hl.features.length) {
+      var b = bbox(c.hl), el = document.createElement("div");
+      el.className = "rc-label"; el.textContent = "Corso Regina Margherita";
+      label = new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat([(b[0][0] + b[1][0]) / 2, b[1][1]]).addTo(map);
+    }
+  }
+  function moveBike() {
+    var c = cities[cur]; if (!bikeMk) return;
+    var p = pointAt(c, bikeD), q = pointAt(c, Math.max(0, Math.min(c.rLen, bikeD + bikeDir * 5)));
+    bikeMk.setLngLat(p);
+    bikeEl.classList.toggle("is-left", q[0] < p[0]);
+  }
+  function frame(ts) {
+    var c = cities[cur];
+    if (last == null) last = ts;
+    var dt = Math.min(64, ts - last) / 1000; last = ts;
+    var secs = Math.max(20, c.viaggio * 2.5); // durata di un'andata, in secondi
+    bikeD += bikeDir * c.rLen / secs * dt;
+    if (bikeD >= c.rLen) { bikeD = c.rLen; bikeDir = -1; }
+    if (bikeD <= 0) { bikeD = 0; bikeDir = 1; }
+    moveBike();
+    raf = requestAnimationFrame(frame);
+  }
+  function startBike() { if (raf || !bikeMk) return; last = null; raf = requestAnimationFrame(frame); }
+  function stopBike() { if (raf) cancelAnimationFrame(raf); raf = null; }
+
+  function hover(e) {
+    if (!e.features || !e.features.length) return;
+    var f = e.features[0];
+    if (hoverId != null) map.setFeatureState({ source: "rete", id: hoverId }, { hover: false });
+    hoverId = f.id; map.setFeatureState({ source: "rete", id: hoverId }, { hover: true });
+    map.getCanvas().style.cursor = "pointer";
+    var p = f.properties, rows = [["Tipo", esc(p.d)], ["Lunghezza del tratto", f0(p.m) + " m"]];
+    if (p.s) rows.push(["Fondo", esc(p.s)]);
+    if (p.i) rows.push(["Illuminato", esc(p.i)]);
+    if (p.w) rows.push(["Larghezza", esc(String(p.w).replace(".", ",")) + " m"]);
+    if (p.v) rows.push(["Limite per le auto", esc(p.v) + " km/h"]);
+    if (p.o) rows.push(["Senso unico per le bici", "sì"]);
+    var note = p.t === "principale" ? "Fa parte della rete continua più grande" : (p.t === "protetta" ? "Tratto staccato dalla rete principale" : "Nessuna separazione fisica dalle auto");
+    tip.show(R.tipHTML({ title: p.n ? esc(p.n) : "Tratto senza nome", value: null, rows: rows, note: note }), e.point.x, e.point.y + mapEl.offsetTop - 8);
+  }
+  function unhover() {
+    if (map && hoverId != null && map.getSource("rete")) map.setFeatureState({ source: "rete", id: hoverId }, { hover: false });
+    hoverId = null; if (map) map.getCanvas().style.cursor = ""; tip.hide();
+  }
+  function hoverLuogo(e) {
+    var p = e.features[0].properties; map.getCanvas().style.cursor = "pointer";
+    tip.show(R.tipHTML({ title: esc(p.testo), value: null, rows: [["Data", esc(p.data)]], note: "Fonte: " + esc(p.fonte) }), e.point.x, e.point.y + mapEl.offsetTop - 8);
   }
 
   function show(i) {
     if (i < 0 || i >= cities.length || i === cur) return;
-    cur = i; tip.hide(); bikeT = 0; bikeDir = 1; draw("play");
+    unhover(); cur = i; bikeD = 0; bikeDir = 1;
+    var c = cities[cur];
+    if (map.getSource("rete")) {
+      map.getSource("rete").setData(c.lines);
+      map.getSource("percorso").setData(c.route);
+      map.getSource("luoghi").setData(c.luoghi);
+    }
+    map.fitBounds(c.bounds, { padding: 30, duration: R.reduced ? 0 : 900 });
+    placeMarkers();
+    update();
     var t = d3.selectAll(".rc-tab").nodes()[cur]; if (t) t.focus({ preventScroll: true });
   }
 
-  function draw(phase) {
+  function update() {
     var c = cities[cur];
     d3.selectAll(".rc-tab").attr("aria-selected", function (d) { return d === c; }).attr("tabindex", function (d) { return d === c ? 0 : -1; });
     d3.select("#prev").property("disabled", cur === 0);
     d3.select("#next").property("disabled", cur === cities.length - 1);
     d3.select("#count").text((cur + 1) + " di " + cities.length);
-    stats(c);
-
-    stopBike();
-    stage.select("svg").remove();
-    H = Math.round(W * (R.isNarrow(W) ? 1.05 : 0.78));
-    var proj = d3.geoMercator().fitExtent([[8, 46], [W - 8, H - 8]], c.fc), path = d3.geoPath(proj);
-    svg = stage.insert("svg", ".rc-ride").attr("viewBox", "0 0 " + W + " " + H).attr("role", "img")
-      .attr("aria-label", "Mappa delle piste ciclabili di " + c.k + ": la rete protetta continua più grande misura " + f0(c.big) +
-        " km su " + f0(c.P) + " km di piste separate dalle auto, divise in " + f0(c.pezzi) + " pezzi; le corsie dipinte sono " + f0(c.C) +
-        " km. Il viaggio più lungo restando su piste protette è di " + f1(c.viaggio) + " km.");
-    svg.append("title").text("Rete ciclabile di " + c.k);
-    gZoom = svg.append("g");
-
-    var lines = gZoom.append("g").selectAll("path").data(c.lines).join("path").attr("class", "mark").attr("d", path)
-      .attr("vector-effect", "non-scaling-stroke")
-      .style("fill", "none").style("stroke", function (f) { return COL[f.properties.t]; })
-      .style("stroke-width", function (f) { return WID[f.properties.t]; }).style("stroke-linecap", "round");
-    R.enter(lines, phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", 1); });
-
-    routePath = gZoom.append("path").attr("d", path(c.route)).attr("vector-effect", "non-scaling-stroke")
-      .style("fill", "none").style("stroke", "var(--ink)").style("stroke-width", 1).style("stroke-dasharray", "3 3")
-      .style("opacity", 0.7).style("pointer-events", "none");
-
-    var hit = gZoom.append("g").selectAll("path").data(c.lines).join("path").attr("d", path)
-      .attr("vector-effect", "non-scaling-stroke")
-      .style("fill", "none").style("stroke", "transparent").style("stroke-width", 10).style("cursor", "pointer");
-    var halo = gZoom.append("path").attr("vector-effect", "non-scaling-stroke").style("fill", "none")
-      .style("stroke", "var(--ink)").style("stroke-width", 4).style("stroke-linecap", "round").style("opacity", 0).style("pointer-events", "none");
-    clearHover = function () { halo.style("opacity", 0); };
-    hit.on("pointerenter pointerdown", function (ev, f) {
-      halo.attr("d", path(f)).style("opacity", 0.85);
-      var p = f.properties, rows = [["Lunghezza del tratto", f0(p.m) + " m"]];
-      if (p.s) rows.push(["Fondo", p.s]);
-      if (p.i) rows.push(["Illuminato", p.i]);
-      if (p.w) rows.push(["Larghezza", String(p.w).replace(".", ",") + " m"]);
-      if (p.v) rows.push(["Limite per le auto", p.v + " km/h"]);
-      if (p.o) rows.push(["Senso unico per le bici", "sì"]);
-      var note = p.t === "principale" ? "Fa parte della rete continua più grande" : (p.t === "protetta" ? "Tratto staccato dalla rete principale" : "Nessuna separazione fisica dalle auto");
-      var xy = d3.pointer(ev, stageEl);
-      tip.show(R.tipHTML({ title: p.n ? esc(p.n) : "Tratto senza nome", value: null, rows: [["Tipo", p.d]].concat(rows.map(function (r) { return [r[0], esc(r[1])]; })), note: note }), xy[0], xy[1] - 8);
-    }).on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); clearHover(); } });
-
-    // luoghi delle vittime, solo se presenti nel CSV con una fonte
-    var pts = gZoom.append("g").selectAll("circle").data(c.luoghi).join("circle")
-      .attr("cx", function (l) { return proj([R.num(l["Longitudine"]), R.num(l["Latitudine"])])[0]; })
-      .attr("cy", function (l) { return proj([R.num(l["Longitudine"]), R.num(l["Latitudine"])])[1]; })
-      .attr("r", 4.5).style("fill", "var(--ink)").style("stroke", "var(--bg)").style("stroke-width", 1.5).style("cursor", "pointer")
-      .on("pointerenter pointerdown", function (ev, l) {
-        var xy = d3.pointer(ev, stageEl);
-        tip.show(R.tipHTML({ title: esc(l["Testo"]), value: null, rows: [["Data", esc(l["Data"])]], note: "Fonte: " + esc(l["Fonte"]) }), xy[0], xy[1] - 8);
-      }).on("pointerleave", function (ev) { if (ev.pointerType === "mouse") tip.hide(); });
-
-    var an = gZoom.append("g").attr("class", "anno").style("pointer-events", "none");
-    var hl = c.lines.filter(function (f) { return f.properties.hl; });
-    if (hl.length) {
-      var b = path.bounds({ type: "FeatureCollection", features: hl });
-      var cx = (b[0][0] + b[1][0]) / 2, cy = b[0][1];
-      an.append("path").attr("d", "M" + cx + "," + (cy - 2) + "V" + Math.max(32, cy - 34)).attr("vector-effect", "non-scaling-stroke");
-      an.append("circle").attr("cx", cx).attr("cy", cy - 2).attr("r", 1.75);
-      an.append("text").attr("x", cx).attr("y", Math.max(26, cy - 40)).attr("text-anchor", "middle")
-        .append("tspan").attr("class", "em").text("Corso Regina Margherita");
-    }
-
-    // bicicletta (disegno generico)
-    gBike = gZoom.append("g").style("pointer-events", "none");
-    var bike = gBike.append("g").attr("class", "bike");
-    bike.append("circle").attr("r", 10).style("fill", "var(--bg)").style("stroke", "var(--ink)").style("stroke-width", 1);
-    var bk = bike.append("g").attr("transform", "translate(-6.5,-3.5)").style("fill", "none").style("stroke", "var(--ink)")
-      .style("stroke-width", 1.2).style("stroke-linecap", "round").style("stroke-linejoin", "round");
-    bk.append("circle").attr("cx", 2.6).attr("cy", 5.4).attr("r", 2.6);
-    bk.append("circle").attr("cx", 10.4).attr("cy", 5.4).attr("r", 2.6);
-    bk.append("path").attr("d", "M2.6 5.4 L5.2 1.2 L9.2 1.2 L10.4 5.4 M5.2 1.2 L6.8 5.4 L9.2 1.2 M4.2 -0.2 L6.2 -0.2 M8.6 -1 L10 -1");
-    placeBike();
-
-    zoom = d3.zoom().scaleExtent([1, 14]).translateExtent([[0, 0], [W, H]])
-      .filter(function (ev) { return ev.type === "wheel" ? (ev.ctrlKey || ev.metaKey) : !ev.button; })
-      .on("zoom", function (ev) {
-        zoomK = ev.transform.k;
-        gZoom.attr("transform", ev.transform);
-        pts.attr("r", 4.5 / zoomK).style("stroke-width", 1.5 / zoomK);
-        an.selectAll("text").style("font-size", 13 / zoomK + "px").style("stroke-width", 4 / zoomK + "px");
-        an.selectAll("circle").attr("r", 1.75 / zoomK);
-        placeBike();
-      });
-    svg.call(zoom).on("dblclick.zoom", null);
-    zoomK = 1;
-    if (riding && inView) startBike();
-  }
-
-  function stats(c) {
+    mapEl.setAttribute("aria-label", "Mappa delle piste ciclabili di " + c.k + ": la rete protetta continua più grande misura " + f0(c.big) +
+      " km su " + f0(c.P) + " km di piste separate dalle auto, divise in " + f0(c.pezzi) + " pezzi; le corsie dipinte sono " + f0(c.C) +
+      " km. Il viaggio più lungo restando su piste protette è di " + f1(c.viaggio) + " km.");
     var data = [
       { v: f1(c.viaggio) + " km", t: "il viaggio più lungo che si può fare restando sempre su piste separate dalle auto" },
       { v: f0(c.pezzi), t: "pezzi di rete protetta staccati tra loro, " + f0(c.corti) + " più corti di 500 metri" },
@@ -265,29 +328,8 @@
     }
     d3.select("#stats").selectAll("div").data(data).join("div").attr("class", function (d) { return "rc-stat" + (d.red ? " is-red" : ""); })
       .html(function (d) { return "<b>" + d.v + "</b><span>" + d.t + "</span>"; });
+    R.scheduleHeight();
   }
-
-  // ---- la bici va avanti e indietro lungo il percorso ----
-  function placeBike() {
-    if (!routePath || !gBike) return;
-    var node = routePath.node(), L = node.getTotalLength();
-    var p = node.getPointAtLength(bikeT * L);
-    var q = node.getPointAtLength(Math.max(0, Math.min(L, bikeT * L + bikeDir * 3)));
-    var flip = q.x < p.x ? -1 : 1;
-    gBike.select(".bike").attr("transform", "translate(" + p.x + "," + p.y + ") scale(" + (flip / zoomK) + "," + (1 / zoomK) + ")");
-  }
-  function frame(ts) {
-    if (last == null) last = ts;
-    var dt = Math.min(64, ts - last); last = ts;
-    var L = routePath.node().getTotalLength() || 1;
-    bikeT += bikeDir * (60 / zoomK) * dt / 1000 / L; // circa 60 pixel al secondo sullo schermo
-    if (bikeT >= 1) { bikeT = 1; bikeDir = -1; }
-    if (bikeT <= 0) { bikeT = 0; bikeDir = 1; }
-    placeBike();
-    raf = requestAnimationFrame(frame);
-  }
-  function startBike() { if (raf || !routePath) return; last = null; raf = requestAnimationFrame(frame); }
-  function stopBike() { if (raf) cancelAnimationFrame(raf); raf = null; }
 })();
 </script>
 </body>
