@@ -48,6 +48,15 @@
   .rc-label { font: 600 12px/1.2 var(--sans); color: var(--ink); background: var(--bg); padding: 3px 6px; border-radius: 3px;
     box-shadow: 0 1px 3px rgba(0,0,0,.15); white-space: nowrap; pointer-events: none; transform: translateY(-14px); }
   .maplibregl-ctrl-attrib { font-size: 10px; }
+  .rc-method { margin-top: 14px; font-size: 13px; line-height: 1.5; color: var(--ink-2); border-top: 1px solid var(--rule); padding-top: 10px; }
+  .rc-method summary { cursor: pointer; font-weight: 600; color: var(--ink); list-style: none; }
+  .rc-method summary::-webkit-details-marker { display: none; }
+  .rc-method summary::before { content: "+"; display: inline-block; width: 16px; font-weight: 700; }
+  .rc-method[open] summary::before { content: "−"; }
+  .rc-method ul { margin: 8px 0 0; padding-left: 18px; }
+  .rc-method li { margin: 0 0 6px; }
+  .rc-method b { color: var(--ink); font-weight: 600; }
+  .rc-method code { font-size: 12px; background: var(--rule); padding: 1px 4px; border-radius: 3px; color: var(--ink); }
   .r-tip { z-index: 3; }
 </style>
 </head>
@@ -81,6 +90,18 @@
   <div class="rc-stats" id="stats"></div>
 
   <p class="rc-note">La bicicletta percorre avanti e indietro il viaggio più lungo che si può fare restando sempre su piste separate dalle auto. Due tratti sono considerati collegati se distano al massimo 15 metri, circa la larghezza di un attraversamento. OpenStreetMap è mappato da volontari: i km mappati vanno dall'87% al 105% di quelli rilevati da Istat. Istat non pubblica il numero di ciclisti morti per singolo comune: per questo riportiamo i morti in strada di tutte le categorie e le bici coinvolte in incidenti, che Istat conta insieme ai monopattini elettrici.</p>
+
+
+  <details class="rc-method">
+    <summary>Come abbiamo classificato i tratti</summary>
+    <p>Abbiamo scaricato da OpenStreetMap tutte le piste e le corsie ciclabili dei tre comuni e le abbiamo divise in base alle etichette che la mappa assegna a ogni tratto:</p>
+    <ul>
+      <li><b>Separati dalle auto</b>: piste ciclabili autonome (<code>highway=cycleway</code>), compresi i percorsi ciclopedonali condivisi con i pedoni e gli attraversamenti ciclabili, e piste a lato della strada separate dalla carreggiata (<code>cycleway=track</code>).</li>
+      <li><b>Solo corsia dipinta</b>: corsie ciclabili ricavate sulla carreggiata e delimitate da una striscia (<code>cycleway=lane</code>).</li>
+      <li><b>Esclusi</b>: i tratti con la sola segnaletica a terra e nessuno spazio riservato alle bici (<code>cycleway=shared_lane</code>).</li>
+    </ul>
+    <p>Le lunghezze sono misurate sulla linea di ogni tratto: una corsia per lato della strada conta due volte. Due tratti separati dalle auto sono considerati collegati se distano al massimo 15 metri. Il viaggio più lungo è il percorso più lungo, tra due punti qualsiasi della rete continua, che segue la strada più breve tra di loro restando sempre su piste protette.</p>
+  </details>
 
   <footer class="r-foot">
     <span>Fonte: elaborazione su dati © OpenStreetMap contributors (ODbL), dati al 19-20 novembre 2026; Istat-ACI, Incidenti stradali 2025 (tav. 3.4 e 4.6). Base cartografica OpenFreeMap / OpenMapTiles</span>
